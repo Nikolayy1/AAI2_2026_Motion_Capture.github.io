@@ -1,0 +1,22 @@
+name: 2026_b4a
+channels:
+  - pytorch
+  - conda-forge
+
+dependencies:
+  - python=3.8
+  - numpy=1.23.1
+  - scipy
+  - pytorch=1.12.0
+  - torchvision=0.13.0
+  - cudatoolkit=11.3
+  - pip
+
+  - pip:
+      - smplx==0.1.28
+      - opencv-python==4.11.0.86
+      - trimesh
+      - pyrender
+      - ultralytics
+      - chumpy==0.70
+      - pyopengl==3.1.4
