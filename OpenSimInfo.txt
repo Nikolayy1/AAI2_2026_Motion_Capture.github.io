@@ -3,8 +3,7 @@ https://opensimconfluence.atlassian.net/wiki/spaces/OpenSim/pages/53088857/Devel
 https://github.com/opencap-org/opencap-viewer/blob/main/src/components/pages/AnalysisDashboard.vue
 https://github.com/opensim-org/opensim-gui
 
-Ive looked through the docs, OpenCap viewer has all the shit we need for the 3d camera controls, I havent found where Opensim is implemented
 
-The API guide and developer guide have what we need, it just takes ages to read through and find what you need.
 
-Good Luck, I owe however does this a bottle of something high percent when Im back
+Smpl to osim
+https://github.com/MarilynKeller/SMPL2AddBiomechanics

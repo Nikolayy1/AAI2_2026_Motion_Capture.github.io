@@ -5,6 +5,8 @@ export const API_CONFIG = {
 	// TODO: Replace with your actual backend URL
 	// Example: 'https://your-backend.com/api/upload'
 	UPLOAD_ENDPOINT: 'http://10.55.108.157:8000/upload-video',
+	DOWNLOAD_ENDPOINT: 'http://10.55.108.157:8000/download-video',
+	VIDEO_LIST_ENDPOINT: 'http://10.55.108.157:8000/videos',
 
 	// Add other API endpoints here as needed
 	// Example:
