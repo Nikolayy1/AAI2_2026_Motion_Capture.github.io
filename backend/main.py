@@ -43,6 +43,13 @@ async def create_tables():
         patient_id INTEGER NOT NULL,
         video_filename TEXT NOT NULL,
         video_path TEXT NOT NULL,
+
+        age INTEGER,
+        gender TEXT,
+        height REAL,
+        weight REAL,
+        notes TEXT,
+
         status TEXT DEFAULT 'pending',
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (patient_id) REFERENCES patients(id)
@@ -114,11 +121,16 @@ def run_model(video_path):
     }
 
 
-async def create_job(patient_id: int, video: UploadFile):
+async def create_job(
+    patient_id: int, 
+    video: UploadFile,
+    age,
+    gender,
+    height,
+    weight,
+    notes
+):
     print(f"VIDEO RECEIVED: {video.filename}")
-
-    storage_dir = "./storage/videos"
-    os.makedirs(storage_dir, exist_ok=True)
 
     file_ext = video.filename.split(".")[-1] if "." in video.filename else "mp4"
     video_path = str(VIDEO_DIR / f"{uuid.uuid4().hex}.{file_ext}")
@@ -129,13 +141,36 @@ async def create_job(patient_id: int, video: UploadFile):
 
     submission_id = await database.execute(
         """
-        INSERT INTO submissions (patient_id, video_filename, video_path, status)
-        VALUES (:patient_id, :filename, :video_path, :status)
+        INSERT INTO submissions (
+            patient_id, 
+            video_filename, 
+            video_path, 
+            age,
+            gender,
+            height,
+            weight,
+            notes,
+            status)
+        VALUES (
+            :patient_id,
+            :filename, 
+            :video_path, 
+            :age,
+            :gender,
+            :height,
+            :weight,
+            :notes,
+            :status)
         """,
         {
             "patient_id": patient_id,
             "filename": video.filename,
             "video_path": video_path,
+            "age": age,
+            "gender": gender,
+            "height": height,
+            "weight": weight,
+            "notes": notes,
             "status": "pending"
         }
     )
@@ -272,7 +307,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app.mount("/files", StaticFiles(directory=STORAGE_DIR), name="files")
+app.mount("/files", StaticFiles(directory=str(STORAGE_DIR)), name="files")
 
 app.add_middleware(
     CORSMiddleware,
@@ -294,9 +329,22 @@ def root():
 @app.post("/upload-video")
 async def upload_video(
     patient_id: int = Form(...),
+    age: int = Form(None),
+    gender: str = Form(None),
+    height: float = Form(None),
+    weight: float = Form(None),
+    notes: str = Form(None),
     video: UploadFile = File(...)
 ):
-    submission_id, _ = await create_job(patient_id, video)
+    submission_id, _ = await create_job(
+    patient_id, 
+    video,
+    age,
+    gender,
+    height,
+    weight,
+    notes
+)
     return {"submission_id": submission_id, "status": "received"}
 
 
@@ -326,3 +374,94 @@ async def videos():
         }
         for r in rows
     ]
+
+@app.post("/patients")
+async def create_patient(
+    user_id: int = Form(...),
+    name: str = Form(...)
+):
+    patient_id = await database.execute("""
+        INSERT INTO patients (user_id, name)
+        VALUES (:user_id, :name)
+    """, {"user_id": user_id, "name": name})
+
+    return {"patient_id": patient_id}
+
+@app.get("/patients")
+async def get_patients():
+    return await database.fetch_all("""
+        SELECT 
+            p.id,
+            p.name,
+
+            latest.age,
+            latest.gender,
+            latest.height,
+            latest.weight,
+
+            COUNT(DISTINCT s.id) AS videoCount,
+            MAX(s.uploaded_at) AS lastVisit
+
+        FROM patients p
+
+        LEFT JOIN submissions s ON s.patient_id = p.id
+
+        LEFT JOIN submissions latest ON latest.id = (
+            SELECT id
+            FROM submissions
+            WHERE patient_id = p.id
+            ORDER BY uploaded_at DESC
+            LIMIT 1
+        )
+
+        GROUP BY p.id
+        ORDER BY lastVisit DESC
+    """)
+
+@app.get("/patients/{patient_id}/videos")
+async def patient_videos(patient_id: int):
+
+    patient = await database.fetch_one("""
+        SELECT * FROM patients WHERE id = :id
+    """, {"id": patient_id})
+
+    if not patient:
+        return {"error": "not found"}
+
+    videos = await database.fetch_all("""
+        SELECT 
+            s.id,
+            s.video_path,
+            s.age,
+            s.gender,
+            s.height,
+            s.weight,
+            s.notes,
+            s.uploaded_at,
+            a.annotated_video_path,
+            a.smpl_path
+        FROM submissions s
+        LEFT JOIN analyses a ON a.submission_id = s.id
+        WHERE s.patient_id = :id
+        ORDER BY s.id DESC
+    """, {"id": patient["id"]})
+
+    return {
+        "patient": dict(patient),
+        "videos": [
+            {
+                "submission_id": v["id"],
+                "video_url": to_url(v["video_path"]),
+                "annotated_video_url": to_url(v["annotated_video_path"]) if v["annotated_video_path"] else None,
+                "smpl_url": to_url(v["smpl_path"]) if v["smpl_path"] else None,
+                "biometrics": {
+                    "age": v["age"],
+                    "gender": v["gender"],
+                    "height": v["height"],
+                    "weight": v["weight"],
+                    "notes": v["notes"]
+                }
+            }
+            for v in videos
+        ]
+    }
