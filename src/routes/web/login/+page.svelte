@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+
 	let email: string = $state('');
 	let password: string = $state('');
 	let rememberMe: boolean = $state(false);
@@ -6,12 +8,8 @@
 	function handleLogin(event: Event) {
 		event.preventDefault();
 
-		if (!email || !password) {
-			alert('Please fill in all fields.');
-			return;
-		}
-
-		alert(`Logged in with: ${email}`);
+		// Authentication disabled - redirect directly to dashboard
+		goto('/mobile/dashboard');
 	}
 </script>
 
