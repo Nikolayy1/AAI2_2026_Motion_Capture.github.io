@@ -10,9 +10,6 @@
 	let videoDuration = $state<string>('00:00');
 	let videoElement = $state<HTMLVideoElement | null>(null);
 
-	// Biometric data
-	let biometricData = $state<any>(null);
-
 	// Upload data
 	let uploadData = $state<any>(null);
 
@@ -24,12 +21,6 @@
 	let isProcessing = $state(false);
 
 	onMount(() => {
-		// Load biometric data from session storage
-		const savedBiometric = sessionStorage.getItem('biometricData');
-		if (savedBiometric) {
-			biometricData = JSON.parse(savedBiometric);
-		}
-
 		// Load upload data (video, patient, exercise, faceBlur)
 		const savedUpload = sessionStorage.getItem('uploadData');
 		if (savedUpload) {
@@ -52,8 +43,9 @@
 			videoFile = blurredFile;
 		}
 
-		// If no data found, redirect back to upload
-		if (!biometricData || !uploadData || !videoFile) {
+		// If no upload data or video file found, redirect back to upload
+		// Biometric data is optional (only required for new patients)
+		if (!uploadData || !videoFile) {
 			goto('/mobile/upload');
 		}
 	});
@@ -67,11 +59,13 @@
 	}
 
 	function handleEdit() {
-		goto('/mobile/biometric-information');
+		// Go back to upload page to edit video/patient/exercise selection
+		goto('/mobile/upload');
 	}
 
 	function handleBack() {
-		goto('/mobile/biometric-information');
+		// Go back to upload page
+		goto('/mobile/upload');
 	}
 
 	function handleSubmitClick() {
@@ -120,7 +114,6 @@
 			uploadStatus = 'Upload complete!';
 
 			// Clear session storage
-			sessionStorage.removeItem('biometricData');
 			sessionStorage.removeItem('uploadData');
 
 			// Clear global file variables
@@ -143,15 +136,24 @@
 		return new Promise((resolve, reject) => {
 			const formData = new FormData();
 			formData.append('video', file);
-			formData.append('patient_id', biometricData.patientId.toString());
 
-			// Add biometric data
-			formData.append('gender', biometricData.gender);
-			formData.append('age', biometricData.age);
-			formData.append('height', biometricData.height);
-			formData.append('weight', biometricData.weight);
-			if (biometricData.notes) {
-				formData.append('notes', biometricData.notes);
+			// Add patient ID from uploadData
+			const patientId = uploadData.patientId;
+			formData.append('patient_id', patientId.toString());
+
+			// Add exercise type from uploadData
+			if (uploadData.exercise) {
+				formData.append('exercise_type', uploadData.exercise);
+				formData.append('exercise', uploadData.exercise);  // Fallback field name
+				console.log('Uploading with exercise type:', uploadData.exercise);
+			}
+
+			// Log all form data fields
+			console.log('FormData fields being sent:');
+			for (let pair of formData.entries()) {
+				if (pair[0] !== 'video') {  // Don't log the video file
+					console.log(pair[0] + ': ' + pair[1]);
+				}
 			}
 
 			const xhr = new XMLHttpRequest();
@@ -187,15 +189,6 @@
 		});
 	}
 
-	function getGenderLabel(value: string): string {
-		const labels: Record<string, string> = {
-			'female': 'Female',
-			'male': 'Male',
-			'other': 'Other',
-			'prefer-not-to-say': 'Prefer not to say'
-		};
-		return labels[value] || value;
-	}
 </script>
 
 <div class="container">
@@ -208,7 +201,7 @@
 		<h1>Recording overview</h1>
 	</header>
 
-	{#if biometricData}
+	{#if uploadData}
 		<!-- Video Preview Section -->
 		<section class="video-section">
 			<h2>Video preview</h2>
@@ -236,33 +229,21 @@
 			</div>
 		</section>
 
-		<!-- Biometric Information Summary -->
+		<!-- Upload Information Summary -->
 		<section class="info-section">
-			<h2>Biometric Informations</h2>
+			<h2>Recording Information</h2>
 			<div class="info-grid">
 				<div class="info-item">
-					<span class="info-label">Full Name</span>
-					<span class="info-value">{biometricData.fullName}</span>
+					<span class="info-label">Patient</span>
+					<span class="info-value">{uploadData.patientName || 'Unknown'}</span>
 				</div>
 				<div class="info-item">
-					<span class="info-label">Gender</span>
-					<span class="info-value">{getGenderLabel(biometricData.gender)}</span>
+					<span class="info-label">Exercise</span>
+					<span class="info-value">{uploadData.exercise || 'General'}</span>
 				</div>
 				<div class="info-item">
-					<span class="info-label">Age</span>
-					<span class="info-value">{biometricData.age}</span>
-				</div>
-				<div class="info-item">
-					<span class="info-label">Height</span>
-					<span class="info-value">{biometricData.height} cm</span>
-				</div>
-				<div class="info-item">
-					<span class="info-label">Weight</span>
-					<span class="info-value">{biometricData.weight} kg</span>
-				</div>
-				<div class="info-item">
-					<span class="info-label">Notes</span>
-					<span class="info-value">{biometricData.notes || 'None'}</span>
+					<span class="info-label">Face Blurring</span>
+					<span class="info-value">{uploadData.faceBlur ? 'Enabled' : 'Disabled'}</span>
 				</div>
 			</div>
 		</section>

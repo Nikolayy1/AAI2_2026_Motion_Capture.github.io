@@ -112,7 +112,7 @@
 		showExerciseDropdown = false;
 	}
 
-	// Continue to biometric information page instead of uploading directly
+	// Continue to recording overview - skip biometric data for existing patients
 	async function handleContinue(event: Event) {
 		event.preventDefault();
 
@@ -150,8 +150,9 @@
 		(window as any).__uploadFile = selectedFile;
 		(window as any).__blurredFile = blurredVideoFile;
 
-		// Navigate to biometric information page using SvelteKit navigation
-		goto(`/mobile/biometric-information?patientId=${encodeURIComponent(selectedPatientId)}&patientName=${encodeURIComponent(selectedPatientName)}`);
+		// For existing patients, skip biometric data and go directly to recording overview
+		// Biometric data is only collected when creating a new patient
+		goto('/mobile/recording-overview');
 	}
 
 	async function handleGenerateBlurredPreview() {
