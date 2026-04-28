@@ -8,13 +8,13 @@ Edit the file: **`src/lib/config.ts`**
 
 ```typescript
 export const API_CONFIG = {
-  UPLOAD_ENDPOINT: 'http://localhost:3000/api/upload'  // ← Change this URL
+  UPLOAD_ENDPOINT: 'http://127.0.0.1:8000/upload-video'  // ← Change this URL
 };
 ```
 
 **Replace with your backend URL:**
-- Local dev: `http://localhost:3000/api/upload`
-- Production: `https://api.yourdomain.com/upload`
+- Local dev: `http://127.0.0.1:8000/upload-video`
+- Patient list: `http://127.0.0.1:8000/patients`
 
 ### 2. Start Development Server
 
@@ -32,16 +32,16 @@ Navigate to: `http://localhost:5173/web/upload`
 
 ## What Your Backend Needs
 
-Your backend developer needs to create an endpoint that:
+Your backend needs to provide endpoints that:
 
-1. **Accepts:** `POST` requests with `multipart/form-data`
+1. **Accepts:** `POST` requests with `multipart/form-data` at `http://127.0.0.1:8000/upload-video`
 2. **Field name:** `video`
 3. **Returns:** JSON with success/error status
 
 Example backend (Node.js/Express):
 
 ```javascript
-app.post('/api/upload', upload.single('video'), (req, res) => {
+app.post('/upload-video', upload.single('video'), (req, res) => {
   const file = req.file;
 
   // Save file, process, store in database, etc.

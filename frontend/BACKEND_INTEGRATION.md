@@ -10,19 +10,20 @@ Edit the file: `src/lib/config.ts`
 
 ```typescript
 export const API_CONFIG = {
-  UPLOAD_ENDPOINT: 'YOUR_BACKEND_URL_HERE',
+  UPLOAD_ENDPOINT: 'http://127.0.0.1:8000/upload-video',
 };
 ```
 
 **Examples:**
-- Local development: `http://localhost:3000/api/upload`
-- Production: `https://api.biomechanics4all.com/upload`
+- Upload video: `http://127.0.0.1:8000/upload-video`
+- List patients: `http://127.0.0.1:8000/patients`
+- List videos: `http://127.0.0.1:8000/videos`
 
 ## Backend API Requirements
 
 ### Upload Endpoint Specification
 
-**Endpoint:** `POST /api/upload` (or your chosen path)
+**Endpoint:** `POST /upload-video`
 
 **Request Format:**
 - Content-Type: `multipart/form-data`
@@ -43,7 +44,7 @@ formData.append('video', videoFile);
   "success": true,
   "message": "Video uploaded successfully",
   "videoId": "unique-video-id",
-  "url": "https://your-server.com/videos/unique-video-id"
+  "url": "http://127.0.0.1:8000/download-video/unique-video-id"
 }
 ```
 
