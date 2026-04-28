@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { blurFacesInVideo } from '$lib/videoFaceBlurring';
-	import { UPLOAD_ENDPOINT } from '$lib/config';
+	import { API_CONFIG } from '$lib/config';
 
 	// Video state
 	let videoUrl = $state<string>('');
@@ -184,7 +184,7 @@
 				reject(new Error('Upload cancelled'));
 			});
 
-			xhr.open('POST', UPLOAD_ENDPOINT);
+			xhr.open('POST', API_CONFIG.UPLOAD_ENDPOINT);
 			xhr.send(formData);
 		});
 	}
@@ -275,10 +275,28 @@
 
 		<!-- Confirmation Dialog -->
 		{#if showConfirmDialog}
-			<div class="dialog-overlay" onclick={handleCancelSubmit}>
-				<div class="dialog" onclick={(e) => e.stopPropagation()}>
-					<h3>Confirm Submission</h3>
-					<p>Are you ready to submit this recording to the database?</p>
+			<div
+				class="dialog-overlay"
+				role="button"
+				tabindex="0"
+				aria-label="Close confirmation dialog"
+				onclick={(e) => {
+					if (e.target === e.currentTarget) handleCancelSubmit();
+				}}
+				onkeydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') handleCancelSubmit();
+				}}
+			>
+				<div
+					class="dialog"
+					role="dialog"
+					tabindex="-1"
+					aria-modal="true"
+					aria-labelledby="confirm-submit-title"
+					aria-describedby="confirm-submit-description"
+				>
+					<h3 id="confirm-submit-title">Confirm Submission</h3>
+					<p id="confirm-submit-description">Are you ready to submit this recording to the database?</p>
 					<div class="dialog-buttons">
 						<button class="cancel-button" onclick={handleCancelSubmit}>Cancel</button>
 						<button class="confirm-button" onclick={handleConfirmSubmit}>Submit</button>

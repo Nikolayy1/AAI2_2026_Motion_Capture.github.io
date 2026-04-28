@@ -1,8 +1,23 @@
-<script>
+<script lang="ts">
   import { onMount } from "svelte";
 
-  let video;
-  let frames = $state([]);
+  type Point = {
+    x: number;
+    y: number;
+  };
+
+  type FrameData = {
+    frame: number;
+    points: Record<string, Point>;
+  };
+
+  type DragState = {
+    frame: number;
+    joint: string;
+  };
+
+  let video: HTMLVideoElement | null = null;
+  let frames = $state<FrameData[]>([]);
   let frameIndex = $state(0);
 
   const width = 480;
@@ -28,12 +43,8 @@
 
   let current = $derived(frames[frameIndex]);
 
-  onMount(async () => {
-    const res = await fetch("/important_joints_2d.csv");
-    const text = await res.text();
-    frames = parseCSV(text);
-
-    let rafId;
+  onMount(() => {
+    let rafId = 0;
 
     function tick() {
       if (video && frames.length > 0 && !video.paused) {
@@ -44,17 +55,25 @@
       rafId = requestAnimationFrame(tick);
     }
 
+    async function loadFrames() {
+      const res = await fetch("/important_joints_2d.csv");
+      const text = await res.text();
+      frames = parseCSV(text);
+    }
+
+    void loadFrames();
     tick();
 
     return () => cancelAnimationFrame(rafId);
   });
 
-  function parseCSV(text) {
+  function parseCSV(text: string): FrameData[] {
     const rows = text.trim().split("\n").slice(1);
-    const grouped = {};
+    const grouped: Record<string, Record<string, Point>> = {};
 
     for (const row of rows) {
       const [frame, joint, x, y] = row.split(",");
+      if (!frame || !joint || x === undefined || y === undefined) continue;
       if (!grouped[frame]) grouped[frame] = {};
       grouped[frame][joint] = {
         x: Number(x),
@@ -70,16 +89,16 @@
       }));
   }
 
-  function project(p) {
+  function project(p: Point): Point {
     return {
       x: p.x,
       y: p.y,
     };
   }
 
-  let dragging = $state(null);
+  let dragging = $state<DragState | null>(null);
 
-  function startDrag(frame, joint) {
+  function startDrag(frame: number, joint: string) {
     dragging = { frame, joint };
   }
 
@@ -87,10 +106,11 @@
     dragging = null;
   }
 
-  function dragPoint(event) {
+  function dragPoint(event: PointerEvent) {
     if (!dragging || !current) return;
 
-    const svg = event.currentTarget;
+    const svg = event.currentTarget as SVGSVGElement | null;
+    if (!svg) return;
     const rect = svg.getBoundingClientRect();
 
     const x = event.clientX - rect.left;
@@ -99,7 +119,7 @@
     frames[frameIndex].points[dragging.joint] = { x, y };
   }
 
-  function setVideoToFrame(index) {
+  function setVideoToFrame(index: number) {
     if (!video || frames.length === 0) return;
 
     frameIndex = Math.max(0, Math.min(index, frames.length - 1));
@@ -107,18 +127,23 @@
   }
 
   function nextFrame() {
+    if (!video) return;
     video.pause();
     setVideoToFrame(frameIndex + 1);
   }
 
   function prevFrame() {
+    if (!video) return;
     video.pause();
     setVideoToFrame(frameIndex - 1);
   }
 
-  function seekFrame(event) {
+  function seekFrame(event: Event) {
+    if (!video) return;
+    const target = event.currentTarget as HTMLInputElement | null;
+    if (!target) return;
     video.pause();
-    setVideoToFrame(Number(event.target.value));
+    setVideoToFrame(Number(target.value));
   }
 
   function exportCSV() {
@@ -145,6 +170,7 @@
 </script>
 
 <div style="position: relative; width: {width}px; height: {height}px;">
+  <!-- svelte-ignore a11y_media_has_caption -->
   <video
     bind:this={video}
     src="/original.mov"
@@ -152,9 +178,10 @@
     {height}
     controls
     style="position:absolute; left:0; top:0;"
-  />
+  ></video>
 
   {#if current}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <svg
       {width}
       {height}
@@ -182,6 +209,7 @@
       {#each Object.entries(current.points) as [name, p]}
         {@const pos = project(p)}
 
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <circle
           cx={pos.x}
           cy={pos.y}
@@ -203,7 +231,7 @@
 <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center;">
   <button onclick={prevFrame}>← 1 frame</button>
 
-  <button onclick={() => (video.paused ? video.play() : video.pause())}>
+  <button onclick={() => (video?.paused ? video.play() : video?.pause())}>
     Play / Pause
   </button>
 

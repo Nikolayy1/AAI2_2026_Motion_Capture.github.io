@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { API_CONFIG, PATIENTS_LIST_ENDPOINT } from "$lib/config";
+	import { API_CONFIG } from "$lib/config";
 	import { blurFacesInVideo } from "$lib/videoFaceBlurring";
 
 	interface Patient {
@@ -33,14 +33,14 @@
 	let patients: Patient[] = $state([]);
 
 	// Load patients from backend on mount
-	onMount(async () => {
-		await loadPatients();
+	onMount(() => {
+		void loadPatients();
 	});
 
 	async function loadPatients() {
 		isLoadingPatients = true;
 		try {
-			const response = await fetch(PATIENTS_LIST_ENDPOINT);
+			const response = await fetch(API_CONFIG.PATIENTS_LIST_ENDPOINT);
 			if (!response.ok) throw new Error('Failed to load patients');
 			const data = await response.json();
 
