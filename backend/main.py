@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, Depends
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -66,7 +66,9 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 # =========================
 
 def to_url(path: str) -> str:
-    return path.replace("./storage", "/files")
+    if not path:
+        return None
+    return "/files/" + path
 
 
 # =========================
@@ -98,10 +100,12 @@ async def create_tables():
     CREATE TABLE IF NOT EXISTS analyses (
         id INTEGER PRIMARY KEY,
         submission_id INTEGER NOT NULL,
-        keypoints_json TEXT,
         metrics_json TEXT,
         annotated_video_path TEXT,
-        smpl_path TEXT,
+        keypoints_csv TEXT,
+        slam_path TEXT,
+        tracking_path TEXT,
+        wham_path TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (submission_id) REFERENCES submissions(id)
     )
@@ -130,34 +134,48 @@ async def create_tables():
 # ---- CORE LOGIC ----
 # =========================
 
+
 def run_model(video_path):
-    url = "http://142.169.249.42:16339/process_video"
+    base_url = "http://142.169.249.42:16339"
+
+    request_id = Path(video_path).stem
 
     with open(video_path, "rb") as f:
-        files = {
-            "file": (
-                os.path.basename(video_path),
-                f,
-                "application/octet-stream"
-            )
-        }
-        response = requests.post(url, files=files)
+        files = {"file": (os.path.basename(video_path), f)}
+        response = requests.post(f"{base_url}/process_video", files=files)
+
 
     if response.status_code != 200:
-        print("Model error response:", response.text)
-        raise Exception(f"Model failed: {response.status_code}")
+        raise Exception(response.text)
 
-    base, ext = os.path.splitext(video_path)
-    output_path = base + "_out.mp4"
+    base = os.path.splitext(video_path)[0]
+    output_dir = base + "_results"
+    os.makedirs(output_dir, exist_ok=True)
 
-    with open(output_path, "wb") as f:
-        f.write(response.content)
+    def download(name):
+        url = f"{base_url}/download/{request_id}/{name}"
+        r = requests.get(url)
+
+        print("DOWNLOAD URL:", url)
+        print("STATUS:", r.status_code)
+
+        if r.status_code != 200:
+            print("BODY:", r.text[:300])
+            raise Exception(f"failed: {name}")
+
+        full_path = os.path.join(output_dir, name)
+        with open(full_path, "wb") as f:
+            f.write(r.content)
+
+        return Path(full_path).relative_to(STORAGE_DIR).as_posix()
 
     return {
-        "annotated_video_path": output_path,
-        "smpl_path": None
+        "annotated_video_path": download("output.mp4"),
+        "keypoints_csv": download("keypoints_2d.csv"),
+        "slam_path": download("slam_results.pth"),
+        "tracking_path": download("tracking_results.pth"),
+        "wham_path": download("wham_results.pth"),
     }
-
 
 async def create_job(
     patient_id: int, 
@@ -234,7 +252,10 @@ async def get_completed_videos():
         SELECT s.id,
                s.video_path,
                a.annotated_video_path,
-               a.smpl_path
+               a.keypoints_csv,
+               a.slam_path,
+               a.tracking_path,
+               a.wham_path
         FROM submissions s
         LEFT JOIN analyses a ON a.submission_id = s.id
         ORDER BY s.id DESC
@@ -279,17 +300,40 @@ async def process_next_job():
     try:
         result = run_model(video_path)
 
+        keypoints_file = STORAGE_DIR / result["keypoints_csv"]
+
+        with open(keypoints_file, "r") as f:
+            keypoints_csv = f.read()
+
         await database.execute(
             """
-            INSERT INTO analyses (submission_id, annotated_video_path, smpl_path)
-            VALUES (:submission_id, :video, :smpl)
+            INSERT INTO analyses (
+                submission_id,
+                annotated_video_path,
+                keypoints_csv,
+                slam_path,
+                tracking_path,
+                wham_path
+            )
+            VALUES (
+                :submission_id,
+                :video,
+                :keypoints,
+                :slam,
+                :tracking,
+                :wham
+            )
             """,
             {
                 "submission_id": job["id"],
                 "video": result["annotated_video_path"],
-                "smpl": result["smpl_path"]
+                "keypoints": keypoints_csv,
+                "slam": result["slam_path"],
+                "tracking": result["tracking_path"],
+                "wham": result["wham_path"]
             }
         )
+
 
         await database.execute(
             """
@@ -436,21 +480,6 @@ async def status(submission_id: int):
         "status": submission["status"]
     }
 
-
-@app.get("/videos")
-async def videos():
-    rows = await get_completed_videos()
-
-    return [
-        {
-            "submission_id": r["id"],
-            "video_url": to_url(r["video_path"]),
-            "annotated_video_url": to_url(r["annotated_video_path"]) if r["annotated_video_path"] else None,
-            "smpl_url": to_url(r["smpl_path"]) if r["smpl_path"] else None
-        }
-        for r in rows
-    ]
-
 @app.post("/patients")
 async def create_patient(
     user_id: int = Depends(get_current_user),
@@ -494,7 +523,10 @@ async def patient_videos(patient_id: int):
             s.notes,
             s.uploaded_at,
             a.annotated_video_path,
-            a.smpl_path
+            a.keypoints_csv,
+            a.slam_path,
+            a.tracking_path,
+            a.wham_path
         FROM submissions s
         LEFT JOIN analyses a ON a.submission_id = s.id
         WHERE s.patient_id = :id
@@ -508,7 +540,10 @@ async def patient_videos(patient_id: int):
                 "submission_id": v["id"],
                 "video_url": to_url(v["video_path"]),
                 "annotated_video_url": to_url(v["annotated_video_path"]) if v["annotated_video_path"] else None,
-                "smpl_url": to_url(v["smpl_path"]) if v["smpl_path"] else None,
+                "keypoints_url": to_url(v["keypoints_csv"]) if v["keypoints_csv"] else None,
+                "slam_url": to_url(v["slam_path"]) if v["slam_path"] else None,
+                "tracking_url": to_url(v["tracking_path"]) if v["tracking_path"] else None,
+                "wham_url": to_url(v["wham_path"]) if v["wham_path"] else None,
                 "biometrics": {
                     "age": v["age"],
                     "gender": v["gender"],
@@ -516,8 +551,52 @@ async def patient_videos(patient_id: int):
                     "weight": v["weight"],
                     "exercise_type": v["exercise_type"],
                     "notes": v["notes"]
-                }
+                },
             }
             for v in videos
         ]
+    }
+
+@app.get("/videos/{submission_id}")
+async def video_detail(submission_id: int):
+    row = await database.fetch_one("""
+        SELECT 
+            s.id,
+            s.video_path,
+            s.age,
+            s.gender,
+            s.height,
+            s.weight,
+            s.exercise_type,
+            s.notes,
+            s.uploaded_at,
+            a.annotated_video_path,
+            a.keypoints_csv,
+            a.slam_path,
+            a.tracking_path,
+            a.wham_path
+        FROM submissions s
+        LEFT JOIN analyses a ON a.submission_id = s.id
+        WHERE s.id = :id
+    """, {"id": submission_id})
+
+    if not row:
+        return {"error": "not found"}
+
+    return {
+        "submission_id": row["id"],
+        "video_url": to_url(row["video_path"]),
+        "annotated_video_url": to_url(row["annotated_video_path"]) if row["annotated_video_path"] else None,
+        "keypoints_csv": row["keypoints_csv"],
+        "slam_url": to_url(row["slam_path"]) if row["slam_path"] else None,
+        "tracking_url": to_url(row["tracking_path"]) if row["tracking_path"] else None,
+        "wham_url": to_url(row["wham_path"]) if row["wham_path"] else None,
+        "biometrics": {
+            "age": row["age"],
+            "gender": row["gender"],
+            "height": row["height"],
+            "weight": row["weight"],
+            "exercise_type": row["exercise_type"],
+            "notes": row["notes"],
+        }
     }
