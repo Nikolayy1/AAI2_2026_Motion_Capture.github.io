@@ -3,11 +3,17 @@ backend/storage/
 backend/app.db
 backend/__pycache__/
 backend/*.pyc
+backend/venv/
 
 # Frontend build artifacts
 Frontend/node_modules/
 Frontend/.svelte-kit/
 Frontend/build/
+
+# Legacy paths (for compatibility)
+storage/
+app.db
+venv/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

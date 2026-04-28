@@ -1,10 +1,13 @@
-from fastapi import FastAPI, UploadFile, File, Form, Request
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from databases import Database
 from contextlib import asynccontextmanager
 from pathlib import Path
+from passlib.context import CryptContext
+from jose import jwt
+from datetime import datetime, timedelta
 import uuid
 import os
 import asyncio
@@ -24,6 +27,39 @@ STORAGE_DIR = BASE_DIR / "storage"
 VIDEO_DIR = STORAGE_DIR / "videos"
 
 VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+
+# AUTH CONFIG
+SECRET_KEY = "super-secret"
+ALGORITHM = "HS256"
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
+
+# =========================
+# ---- AUTH HELPERS ----
+# =========================
+
+def hash_password(password: str):
+    return pwd_context.hash(password)
+
+def verify_password(password: str, hashed: str):
+    return pwd_context.verify(password, hashed)
+
+def create_token(user_id: int):
+    payload = {
+        "sub": str(user_id),
+        "exp": datetime.utcnow() + timedelta(days=1)
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        return int(payload["sub"])
+    except Exception:
+        raise HTTPException(status_code=401, detail="invalid token")
+
+
 
 # =========================
 # ---- HELPERS ----
@@ -340,7 +376,40 @@ app.mount("/files", StaticFiles(directory=str(STORAGE_DIR)), name="files")
 
 
 # =========================
-# ---- ROUTES (THIN LAYER) ----
+# ---- AUTH ROUTES ----
+# =========================
+
+@app.post("/register")
+async def register(email: str = Form(...), password: str = Form(...)):
+    try:
+        user_id = await database.execute("""
+            INSERT INTO users (email, password_hash)
+            VALUES (:email, :password_hash)
+        """, {
+            "email": email,
+            "password_hash": hash_password(password)
+        })
+        return {"user_id": user_id}
+    except Exception:
+        return {"error": "email already exists"}
+
+
+@app.post("/login")
+async def login(email: str = Form(...), password: str = Form(...)):
+    user = await database.fetch_one(
+        "SELECT * FROM users WHERE email = :email",
+        {"email": email}
+    )
+
+    if not user or not verify_password(password, user["password_hash"]):
+        return {"error": "invalid credentials"}
+
+    token = create_token(user["id"])
+    return {"access_token": token, "user_id": user["id"]}
+
+
+# =========================
+# ---- ROUTES ----
 # =========================
 
 @app.get("/")
@@ -408,8 +477,8 @@ async def videos():
 
 @app.post("/patients")
 async def create_patient(
-    user_id: int = Form(...),
     name: str = Form(...),
+    user_id: int = Form(...),
     age: int = Form(None),
     gender: str = Form(None),
     height: float = Form(None),
