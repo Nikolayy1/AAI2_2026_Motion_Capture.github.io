@@ -1,21 +1,14 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+
 	let fullName: string = $state('');
 	let email: string = $state('');
 	let password: string = $state('');
 	let confirmPassword: string = $state('');
 
 	function handleRegister() {
-		if (!fullName || !email || !password || !confirmPassword) {
-			alert('Please fill in all fields.');
-			return;
-		}
-
-		if (password !== confirmPassword) {
-			alert('Passwords do not match.');
-			return;
-		}
-
-		alert(`Registered:\nName: ${fullName}\nEmail: ${email}`);
+		// Authentication disabled - redirect directly to dashboard
+		goto('/mobile/dashboard');
 	}
 </script>
 

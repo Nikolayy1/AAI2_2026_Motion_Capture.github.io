@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+
 	let fullName: string = $state('');
 	let email: string = $state('');
 	let password: string = $state('');
@@ -7,17 +9,8 @@
 	function handleSignup(event: Event) {
 		event.preventDefault();
 
-		if (!fullName || !email || !password || !confirmPassword) {
-			alert('Please fill in all fields.');
-			return;
-		}
-
-		if (password !== confirmPassword) {
-			alert('Passwords do not match.');
-			return;
-		}
-
-		alert('Sign up button works.');
+		// Authentication disabled - redirect directly to dashboard
+		goto('/mobile/dashboard');
 	}
 </script>
 
