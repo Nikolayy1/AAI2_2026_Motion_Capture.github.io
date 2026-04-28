@@ -8,10 +8,10 @@ const config = {
 		// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 		adapter: adapter(),
 		files: {
-			assets: 'Frontend/static',
-			routes: 'Frontend/src/routes',
-			lib: 'Frontend/src/lib',
-			appTemplate: 'Frontend/src/app.html'
+			assets: 'static',
+			routes: 'src/routes',
+			lib: 'src/lib',
+			appTemplate: 'src/app.html'
 		}
 	},
 	vitePlugin: {

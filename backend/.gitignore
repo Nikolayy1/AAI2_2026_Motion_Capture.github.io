@@ -1,0 +1,87 @@
+# ============================================
+# Backend (Python/FastAPI) - .gitignore
+# ============================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+app.db
+*.db-journal
+
+# Uploaded files & videos
+uploads/
+videos/
+static/videos/
+static/uploads/
+files/
+
+# Logs
+*.log
+logs/
+*.out
+
+# IDE / Editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.cursor/
+.cursorignore
+.cursorindexingignore
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+.hypothesis/
+htmlcov/
+*.cover
+*.py,cover
+.tox/
+.nox/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.installed.cfg
+wheels/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff
+.ruff_cache/
+
+# Environment configuration
+.envrc
+*.env
+!.env.example

@@ -1,6 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from databases import Database
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,7 +30,15 @@ VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 # =========================
 
 def to_url(path: str) -> str:
-    return path.replace("./storage", "/files")
+    if not path:
+        return None
+    # Extract just the filename from full path and construct proper URL
+    filename = os.path.basename(path)
+    # Determine subfolder based on path
+    if "videos" in path:
+        return f"/files/videos/{filename}"
+    else:
+        return f"/files/{filename}"
 
 
 # =========================
@@ -39,7 +48,7 @@ def to_url(path: str) -> str:
 async def create_tables():
     await database.execute("""
     CREATE TABLE IF NOT EXISTS submissions (
-        id INTEGER PRIMARY KEY, 
+        id INTEGER PRIMARY KEY,
         patient_id INTEGER NOT NULL,
         video_filename TEXT NOT NULL,
         video_path TEXT NOT NULL,
@@ -49,6 +58,7 @@ async def create_tables():
         height REAL,
         weight REAL,
         notes TEXT,
+        exercise_type TEXT,
 
         status TEXT DEFAULT 'pending',
         uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -122,13 +132,14 @@ def run_model(video_path):
 
 
 async def create_job(
-    patient_id: int, 
+    patient_id: int,
     video: UploadFile,
     age,
     gender,
     height,
     weight,
-    notes
+    notes,
+    exercise_type
 ):
     print(f"VIDEO RECEIVED: {video.filename}")
 
@@ -142,24 +153,26 @@ async def create_job(
     submission_id = await database.execute(
         """
         INSERT INTO submissions (
-            patient_id, 
-            video_filename, 
-            video_path, 
+            patient_id,
+            video_filename,
+            video_path,
             age,
             gender,
             height,
             weight,
             notes,
+            exercise_type,
             status)
         VALUES (
             :patient_id,
-            :filename, 
-            :video_path, 
+            :filename,
+            :video_path,
             :age,
             :gender,
             :height,
             :weight,
             :notes,
+            :exercise_type,
             :status)
         """,
         {
@@ -171,6 +184,7 @@ async def create_job(
             "height": height,
             "weight": weight,
             "notes": notes,
+            "exercise_type": exercise_type,
             "status": "pending"
         }
     )
@@ -191,10 +205,14 @@ async def get_completed_videos():
     return await database.fetch_all("""
         SELECT s.id,
                s.video_path,
+               s.exercise_type,
+               s.uploaded_at,
+               p.name as patient_name,
                a.annotated_video_path,
                a.smpl_path
         FROM submissions s
         LEFT JOIN analyses a ON a.submission_id = s.id
+        LEFT JOIN patients p ON p.id = s.patient_id
         ORDER BY s.id DESC
     """)
 
@@ -307,14 +325,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app.mount("/files", StaticFiles(directory=str(STORAGE_DIR)), name="files")
-
+# Add CORS middleware BEFORE mounting static files
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
+
+# Mount static files
+app.mount("/files", StaticFiles(directory=str(STORAGE_DIR)), name="files")
 
 
 # =========================
@@ -334,17 +356,23 @@ async def upload_video(
     height: float = Form(None),
     weight: float = Form(None),
     notes: str = Form(None),
+    exercise_type: str = Form(None),
+    exercise: str = Form(None),  # Fallback field name
     video: UploadFile = File(...)
 ):
+    # Use exercise_type if provided, otherwise fall back to exercise field
+    final_exercise_type = exercise_type or exercise
+
     submission_id, _ = await create_job(
-    patient_id, 
-    video,
-    age,
-    gender,
-    height,
-    weight,
-    notes
-)
+        patient_id,
+        video,
+        age,
+        gender,
+        height,
+        weight,
+        notes,
+        final_exercise_type
+    )
     return {"submission_id": submission_id, "status": "received"}
 
 
@@ -370,7 +398,10 @@ async def videos():
             "submission_id": r["id"],
             "video_url": to_url(r["video_path"]),
             "annotated_video_url": to_url(r["annotated_video_path"]) if r["annotated_video_path"] else None,
-            "smpl_url": to_url(r["smpl_path"]) if r["smpl_path"] else None
+            "smpl_url": to_url(r["smpl_path"]) if r["smpl_path"] else None,
+            "exercise_type": r["exercise_type"],
+            "uploaded_at": r["uploaded_at"],
+            "patient_name": r["patient_name"]
         }
         for r in rows
     ]
@@ -378,26 +409,59 @@ async def videos():
 @app.post("/patients")
 async def create_patient(
     user_id: int = Form(...),
-    name: str = Form(...)
+    name: str = Form(...),
+    age: int = Form(None),
+    gender: str = Form(None),
+    height: float = Form(None),
+    weight: float = Form(None)
 ):
     patient_id = await database.execute("""
-        INSERT INTO patients (user_id, name)
-        VALUES (:user_id, :name)
-    """, {"user_id": user_id, "name": name})
+        INSERT INTO patients (user_id, name, age, gender, height, weight)
+        VALUES (:user_id, :name, :age, :gender, :height, :weight)
+    """, {
+        "user_id": user_id,
+        "name": name,
+        "age": age,
+        "gender": gender,
+        "height": height,
+        "weight": weight
+    })
 
     return {"patient_id": patient_id}
+
+@app.put("/patients/{patient_id}")
+async def update_patient_biometrics(
+    patient_id: int,
+    age: int = Form(None),
+    gender: str = Form(None),
+    height: float = Form(None),
+    weight: float = Form(None)
+):
+    await database.execute("""
+        UPDATE patients
+        SET age = :age, gender = :gender, height = :height, weight = :weight
+        WHERE id = :patient_id
+    """, {
+        "patient_id": patient_id,
+        "age": age,
+        "gender": gender,
+        "height": height,
+        "weight": weight
+    })
+
+    return {"success": True, "patient_id": patient_id}
 
 @app.get("/patients")
 async def get_patients():
     return await database.fetch_all("""
-        SELECT 
+        SELECT
             p.id,
             p.name,
 
-            latest.age,
-            latest.gender,
-            latest.height,
-            latest.weight,
+            p.age,
+            p.gender,
+            p.height,
+            p.weight,
 
             COUNT(DISTINCT s.id) AS videoCount,
             MAX(s.uploaded_at) AS lastVisit
@@ -405,14 +469,6 @@ async def get_patients():
         FROM patients p
 
         LEFT JOIN submissions s ON s.patient_id = p.id
-
-        LEFT JOIN submissions latest ON latest.id = (
-            SELECT id
-            FROM submissions
-            WHERE patient_id = p.id
-            ORDER BY uploaded_at DESC
-            LIMIT 1
-        )
 
         GROUP BY p.id
         ORDER BY lastVisit DESC
@@ -429,14 +485,11 @@ async def patient_videos(patient_id: int):
         return {"error": "not found"}
 
     videos = await database.fetch_all("""
-        SELECT 
+        SELECT
             s.id,
             s.video_path,
-            s.age,
-            s.gender,
-            s.height,
-            s.weight,
             s.notes,
+            s.exercise_type,
             s.uploaded_at,
             a.annotated_video_path,
             a.smpl_path
@@ -447,20 +500,23 @@ async def patient_videos(patient_id: int):
     """, {"id": patient["id"]})
 
     return {
-        "patient": dict(patient),
+        "patient": {
+            "id": patient["id"],
+            "name": patient["name"],
+            "age": patient["age"],
+            "gender": patient["gender"],
+            "height": patient["height"],
+            "weight": patient["weight"]
+        },
         "videos": [
             {
                 "submission_id": v["id"],
                 "video_url": to_url(v["video_path"]),
                 "annotated_video_url": to_url(v["annotated_video_path"]) if v["annotated_video_path"] else None,
                 "smpl_url": to_url(v["smpl_path"]) if v["smpl_path"] else None,
-                "biometrics": {
-                    "age": v["age"],
-                    "gender": v["gender"],
-                    "height": v["height"],
-                    "weight": v["weight"],
-                    "notes": v["notes"]
-                }
+                "exercise_type": v["exercise_type"],
+                "uploaded_at": v["uploaded_at"],
+                "notes": v["notes"]
             }
             for v in videos
         ]

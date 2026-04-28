@@ -1,5 +1,13 @@
-storage/
-app.db
+# Backend files (should be in backend/.gitignore but also here for safety)
+backend/storage/
+backend/app.db
+backend/__pycache__/
+backend/*.pyc
+
+# Frontend build artifacts
+Frontend/node_modules/
+Frontend/.svelte-kit/
+Frontend/build/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
