@@ -12,16 +12,10 @@ export const API_CONFIG = {
 
 	// Patient management endpoints
 	CREATE_PATIENT_ENDPOINT: 'http://127.0.0.1:8000/patients',
-<<<<<<<< HEAD:Frontend/src/lib/config.ts
 	UPDATE_PATIENT_ENDPOINT: 'http://127.0.0.1:8000/patients/{patient_id}',
 	PATIENTS_LIST_ENDPOINT: 'http://127.0.0.1:8000/patients',
 	PATIENT_DETAIL_ENDPOINT: 'http://127.0.0.1:8000/patients/:id',
 	PATIENT_VIDEOS_ENDPOINT: 'http://127.0.0.1:8000/patients/:id/videos',
-========
-	PATIENTS_LIST_ENDPOINT: 'http://127.0.0.1:8000/patients',
-	PATIENT_DETAIL_ENDPOINT: 'http://10.55.105.145:8000/patients/:id',
-	PATIENT_VIDEOS_ENDPOINT: 'http://10.55.105.145:8000/patients/:id/videos',
->>>>>>>> 8c496415fd630baa8e9eeb3a7ac1c967fcd037cc:frontend/src/lib/config.ts
 
 	// LOGIN_ENDPOINT: 'http://127.0.0.1:8000/login',
 	// REGISTER_ENDPOINT: 'http://127.0.0.1:8000/register',
