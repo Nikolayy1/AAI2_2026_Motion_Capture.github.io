@@ -129,10 +129,32 @@ async def create_tables():
         id INTEGER PRIMARY KEY,
         user_id INTEGER NOT NULL,
         name TEXT,
+        age INTEGER,
+        gender TEXT,
+        height REAL,
+        weight REAL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
     )
     """)
+
+    await ensure_column("patients", "age", "INTEGER")
+    await ensure_column("patients", "gender", "TEXT")
+    await ensure_column("patients", "height", "REAL")
+    await ensure_column("patients", "weight", "REAL")
+    await ensure_column("submissions", "exercise_type", "TEXT")
+
+
+async def ensure_column(table_name: str, column_name: str, column_type: str):
+    rows = await database.fetch_all(f"PRAGMA table_info({table_name})")
+    columns = {row["name"] for row in rows}
+
+    if column_name in columns:
+        return
+
+    await database.execute(
+        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+    )
 
 # =========================
 # ---- CORE LOGIC ----
