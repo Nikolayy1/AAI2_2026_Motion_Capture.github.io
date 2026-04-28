@@ -14,13 +14,15 @@
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/kit": "^2.50.2",
-		"@sveltejs/vite-plugin-svelte": "^6.2.4",
+		"@sveltejs/vite-plugin-svelte": "^5.0.0",
 		"svelte": "^5.51.0",
 		"svelte-check": "^4.4.2",
 		"typescript": "^5.9.3",
-		"vite": "^7.3.1"
+		"vite": "^6.0.0"
 	},
 	"dependencies": {
-		"@mediapipe/tasks-vision": "^0.10.34"
+		"@mediapipe/tasks-vision": "^0.10.34",
+		"@types/three": "^0.184.0",
+		"three": "^0.184.0"
 	}
 }

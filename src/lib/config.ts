@@ -8,6 +8,15 @@ export const API_CONFIG = {
 	DOWNLOAD_ENDPOINT: 'http://10.55.108.157:8000/download-video',
 	VIDEO_LIST_ENDPOINT: 'http://10.55.108.157:8000/videos',
 
+	// Base API URL for additional endpoints
+	API_BASE: 'http://10.55.108.157:8000',
+
+	// OpenSim specific endpoints
+	OPENSIM_MODEL_ENDPOINT: 'http://10.55.108.157:8000/opensim/model',
+	OPENSIM_ANALYSIS_ENDPOINT: 'http://10.55.108.157:8000/opensim/analysis',
+	// OPENSIM_ANIMATION_ENDPOINT: 'http://10.55.108.157:8000/opensim/animation',
+	OPENSIM_ANIMATION_ENDPOINT: '/opensim_animation.json',
+
 	// Add other API endpoints here as needed
 	// Example:
 	// LOGIN_ENDPOINT: 'http://localhost:3000/api/login',

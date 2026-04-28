@@ -1,16 +1,24 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { API_CONFIG } from "$lib/config";
+	import OpenSimViewer from "$lib/OpenSimViewer.svelte";
 
-	let srcOriginal: string | null = $state(null);
-	let srcModel: string | null = $state(null);
-	let currentTime: number = $state(0);
-	let loading: boolean = $state(true);
-	let error: string | null = $state(null);
-	let isDownloading: boolean = $state(false);
-	let downloadProgress: number = $state(0);
-	let downloadSuccess: boolean = $state(false);
-	let downloadError: string | null = $state(null);
+	let srcOriginal = $state<string | null>(null);
+	let srcModel = $state<string | null>(null);
+	let currentTime = $state<number>(0);
+	let loading = $state<boolean>(true);
+	let error = $state<string | null>(null);
+	let isDownloading = $state<boolean>(false);
+	let downloadProgress = $state<number>(0);
+	let downloadSuccess = $state<boolean>(false);
+	let downloadError = $state<string | null>(null);
+
+	// OpenSim data
+	let opensimModel = $state<any>(null);
+	let opensimAnimation = $state<any>(null);
+	let analysisResults = $state<any>(null);
+	let activeTab = $state<'videos' | 'opensim'>('opensim'); // Start with OpenSim tab for testing
+	let useWhamResult = $state<boolean>(true); // Enable WHAM result mode
 
 	async function loadVideos() {
 		loading = true;
@@ -53,65 +61,32 @@
 		}
 	}
 
-	onMount(loadVideos);
+	async function loadOpenSimData() {
 
-/**
-	function downloadVideo(file: File) {
-		isDownloading = true;
-		downloadProgress = 0;
-		downloadSuccess = false;
-		downloadError = null;
 
-		const formData = new FormData();
-		formData.append("video", file);
-
-		const xhr = new XMLHttpRequest();
-
-		// Track download progress
-		xhr.addEventListener("progress", (e) => {
-			if (e.lengthComputable) {
-				downloadProgress = Math.round((e.loaded / e.total) * 100);
-			}
-		});
-
-		xhr.addEventListener("load", () => {
-			isDownloading = false;
-
-			if (xhr.status >= 200 && xhr.status < 300) {
-				downloadSuccess = true;
-				downloadProgress = 100;
-
-				try {
-					const response = JSON.parse(xhr.responseText);
-					console.log("Download successful:", response);
-				} catch (e) {
-					console.log("Download successful");
+		try {
+			const animationResponse = await fetch(API_CONFIG.OPENSIM_ANIMATION_ENDPOINT);
+			if (animationResponse.ok) {
+				opensimAnimation = await animationResponse.json();
 				}
-			} else {
-				downloadError = `Download failed: ${xhr.statusText || "Server error"}`;
-				downloadProgress = 0;
+			} catch (animationError) {
+				console.warn('OpenSim animation endpoint unavailable:', animationError);
 			}
-		});
-
-		// Handle errors
-		xhr.addEventListener("error", () => {
-			isDownloading = false;
-			downloadError =
-				"Download failed: Network error. Please check if the backend server is running.";
-			downloadProgress = 0;
-		});
-
-		xhr.addEventListener("abort", () => {
-			isDownloading = false;
-			downloadError = "Download cancelled";
-			downloadProgress = 0;
-		});
-
-		// Send the request
-		xhr.open("GET", API_CONFIG.DOWNLOAD_ENDPOINT);
-		xhr.send();
+			try {
+				const modelResponse = await fetch(API_CONFIG.OPENSIM_MODEL_ENDPOINT);
+				if (modelResponse.ok) {
+					opensimModel = await modelResponse.json();
+				}
+			} catch (modelError) {
+				console.warn('OpenSim model endpoint unavailable:', modelError);
+			}
 	}
-	*/
+
+	onMount(async () => {
+		// await loadVideos();
+		await loadOpenSimData();
+	});
+
 </script>
 
 <svelte:head>
@@ -119,42 +94,144 @@
 </svelte:head>
 
 <div class="view-page">
-	<h1>Compare Original and Model output</h1>
+	<h1>Motion Capture Analysis</h1>
 
-	{#if loading}
-		<p>Loading videos from the server...</p>
-	{:else if error}
-		<p class="error">{error}</p>
-	{:else}
-		<div class="video-grid">
-			{#if srcOriginal}
-				<div class="video-card">
-					<h2>Video 1</h2>
-					<!-- svelte-ignore a11y-media-has-caption -->
-					<video src={srcOriginal} bind:currentTime controls preload="metadata" />
-					<p>Time: {currentTime.toFixed(1)}s</p>
-				</div>
+	<!-- Tab Navigation -->
+	<div class="tab-navigation">
+		<button
+			class="tab-button {activeTab === 'videos' ? 'active' : ''}"
+			onclick={() => activeTab = 'videos'}
+		>
+			Video Comparison
+		</button>
+		<button
+			class="tab-button {activeTab === 'opensim' ? 'active' : ''}"
+			onclick={() => activeTab = 'opensim'}
+		>
+			OpenSim Model
+		</button>
+	</div>
+
+	{#if activeTab === 'videos'}
+		{#if loading}
+			<p>Loading videos from the server...</p>
+		{:else if error}
+			<p class="error">{error}</p>
+		{:else}
+			<div class="video-grid">
+				{#if srcOriginal}
+					<div class="video-card">
+						<h2>Original Video</h2>
+						<!-- svelte-ignore a11y_media_has_caption -->
+						<video src={srcOriginal} bind:currentTime controls preload="metadata"></video>
+						<p>Time: {currentTime.toFixed(1)}s</p>
+					</div>
+				{/if}
+
+				{#if srcModel}
+					<div class="video-card">
+						<h2>Processed Video</h2>
+						<!-- svelte-ignore a11y_media_has_caption -->
+						<video src={srcModel} bind:currentTime controls preload="metadata"></video>
+						<p>Time: {currentTime.toFixed(1)}s</p>
+					</div>
+				{/if}
+			</div>
+
+			{#if !srcOriginal && !srcModel}
+				<p>No videos are available right now.</p>
 			{/if}
-
-			{#if srcModel}
-				<div class="video-card">
-					<h2>Video 2</h2>
-					<!-- svelte-ignore a11y-media-has-caption -->
-					<video src={srcModel} bind:currentTime controls preload="metadata" />
-					<p>Time: {currentTime.toFixed(1)}s</p>
-				</div>
-			{/if}
-		</div>
-
-		{#if !srcOriginal && !srcModel}
-			<p>No videos are available right now.</p>
 		{/if}
+	{:else if activeTab === 'opensim'}
+		<div class="opensim-section">
+			<div class="opensim-content">
+				<div class="viewer-container">
+					<h2>3D Musculoskeletal Model</h2>
+					<OpenSimViewer animationData={opensimAnimation} analysisResults={analysisResults}/>
+				</div>
+
+				{#if analysisResults}
+					<div class="analysis-panel">
+						<h3>Analysis Results</h3>
+						<div class="analysis-grid">
+							{#if analysisResults.jointForces}
+								<div class="analysis-card">
+									<h4>Joint Forces</h4>
+									<div class="force-data">
+										{#each Object.entries(analysisResults.jointForces) as [joint, force]}
+											<div class="force-item">
+												<span class="joint-name">{joint}:</span>
+												<span class="force-value">{typeof force === 'number' ? force.toFixed(2) : force} N</span>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							{#if analysisResults.muscleActivations}
+								<div class="analysis-card">
+									<h4>Muscle Activations</h4>
+									<div class="activation-data">
+										{#each Object.entries(analysisResults.muscleActivations) as [muscle, activation]}
+											<div class="activation-item">
+												<span class="muscle-name">{muscle}:</span>
+												<div class="activation-bar">
+													<div
+														class="activation-fill"
+														style="width: {Math.min(100, (activation as number) * 100)}%"
+													></div>
+												</div>
+												<span class="activation-value">{typeof activation === 'number' ? (activation * 100).toFixed(1) : activation}%</span>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+						</div>
+					</div>
+				{:else}
+					<div class="no-data">
+						<p>No OpenSim analysis data available. Please process a video first.</p>
+					</div>
+				{/if}
+			</div>
+		</div>
 	{/if}
 </div>
 
 <style>
 	.view-page {
 		padding: 1rem;
+	}
+
+	.tab-navigation {
+		display: flex;
+		gap: 0.5rem;
+		margin-bottom: 1.5rem;
+		border-bottom: 1px solid #ddd;
+	}
+
+	.tab-button {
+		padding: 0.75rem 1.5rem;
+		border: none;
+		background: none;
+		border-bottom: 2px solid transparent;
+		cursor: pointer;
+		font-size: 1rem;
+		font-weight: 500;
+		color: #666;
+		transition: all 0.2s ease;
+	}
+
+	.tab-button:hover {
+		color: #333;
+		background: #f5f5f5;
+	}
+
+	.tab-button.active {
+		color: #2563eb;
+		border-bottom-color: #2563eb;
+		background: #eff6ff;
 	}
 
 	.video-grid {
@@ -189,9 +266,162 @@
 		color: #bf2d2d;
 	}
 
+	.opensim-section {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.opensim-content {
+		display: grid;
+		grid-template-columns: 2fr 1fr;
+		gap: 1.5rem;
+		align-items: start;
+	}
+
+	.viewer-container {
+		border: 1px solid #ddd;
+		border-radius: 0.75rem;
+		padding: 1rem;
+		background: #fff;
+	}
+
+	.viewer-container h2 {
+		margin-top: 0;
+		margin-bottom: 1rem;
+		font-size: 1.2rem;
+	}
+
+	.test-controls {
+		margin-bottom: 1rem;
+		padding: 0.5rem;
+		background: #f8f9fa;
+		border-radius: 0.5rem;
+		border: 1px solid #e9ecef;
+	}
+
+	.test-controls label {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.9rem;
+		font-weight: 500;
+		color: #495057;
+		cursor: pointer;
+	}
+
+	.test-controls input[type="checkbox"] {
+		width: 16px;
+		height: 16px;
+		cursor: pointer;
+	}
+
+	.analysis-panel {
+		border: 1px solid #ddd;
+		border-radius: 0.75rem;
+		padding: 1rem;
+		background: #fff;
+		max-height: 600px;
+		overflow-y: auto;
+	}
+
+	.analysis-panel h3 {
+		margin-top: 0;
+		margin-bottom: 1rem;
+		font-size: 1.1rem;
+	}
+
+	.analysis-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.analysis-card {
+		border: 1px solid #eee;
+		border-radius: 0.5rem;
+		padding: 1rem;
+		background: #fafafa;
+	}
+
+	.analysis-card h4 {
+		margin: 0 0 0.75rem 0;
+		font-size: 1rem;
+		color: #333;
+	}
+
+	.force-data, .activation-data {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.force-item, .activation-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.25rem 0;
+		font-size: 0.9rem;
+	}
+
+	.joint-name, .muscle-name {
+		font-weight: 500;
+		color: #555;
+		min-width: 120px;
+	}
+
+	.force-value, .activation-value {
+		font-weight: 600;
+		color: #2563eb;
+	}
+
+	.activation-bar {
+		flex: 1;
+		height: 8px;
+		background: #e5e7eb;
+		border-radius: 4px;
+		margin: 0 0.5rem;
+		overflow: hidden;
+	}
+
+	.activation-fill {
+		height: 100%;
+		background: linear-gradient(90deg, #10b981, #f59e0b, #ef4444);
+		transition: width 0.3s ease;
+	}
+
+	.no-data {
+		grid-column: 1 / -1;
+		text-align: center;
+		padding: 2rem;
+		color: #666;
+		font-style: italic;
+	}
+
+	@media (max-width: 1200px) {
+		.opensim-content {
+			grid-template-columns: 1fr;
+		}
+	}
+
 	@media (max-width: 900px) {
 		.video-grid {
 			grid-template-columns: 1fr;
+		}
+
+		.tab-navigation {
+			flex-direction: column;
+		}
+
+		.tab-button {
+			text-align: left;
+			border-bottom: none;
+			border-left: 2px solid transparent;
+		}
+
+		.tab-button.active {
+			border-bottom: none;
+			border-left-color: #2563eb;
 		}
 	}
 </style>
