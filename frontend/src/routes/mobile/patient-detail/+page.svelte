@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { PATIENT_VIDEOS_ENDPOINT, BASE_URL } from '$lib/config';
+	import { API_CONFIG } from '$lib/config';
 
 	interface Video {
 		id: string;
@@ -40,7 +40,7 @@
 		{ value: 'Range of Motion', label: 'Range of Motion' }
 	];
 
-	onMount(async () => {
+	onMount(() => {
 		const urlParams = new URLSearchParams(window.location.search);
 		const patientIdParam = urlParams.get('id');
 		patientName = urlParams.get('name') || '';
@@ -51,7 +51,7 @@
 		}
 
 		patientId = parseInt(patientIdParam);
-		await loadPatientData();
+		void loadPatientData();
 	});
 
 	async function loadPatientData() {
@@ -59,7 +59,7 @@
 		error = '';
 
 		try {
-			const endpoint = PATIENT_VIDEOS_ENDPOINT.replace(':id', patientId!.toString());
+			const endpoint = API_CONFIG.PATIENT_VIDEOS_ENDPOINT.replace(':id', patientId!.toString());
 			const response = await fetch(endpoint);
 
 			if (!response.ok) throw new Error('Failed to load patient data');
@@ -153,7 +153,7 @@
 		return new Promise((resolve) => {
 			try {
 				const video = document.createElement('video');
-				const fullUrl = `${BASE_URL}${videoUrl}`;
+				const fullUrl = `${API_CONFIG.BASE_URL}${videoUrl}`;
 
 				console.log('Attempting to load video for thumbnail:', fullUrl);
 
@@ -251,7 +251,7 @@
 
 			// Open video in new tab using the backend's static file serving
 			// video.videoUrl is like "/files/videos/abc123.mp4"
-			const videoUrl = `${BASE_URL}${video.videoUrl}`;
+			const videoUrl = `${API_CONFIG.BASE_URL}${video.videoUrl}`;
 
 			// Validate URL format before opening
 			try {

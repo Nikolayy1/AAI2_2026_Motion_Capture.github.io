@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { VIDEO_LIST_ENDPOINT, BASE_URL } from '$lib/config';
+	import { API_CONFIG } from '$lib/config';
 
 	interface Video {
 		filename: string;
@@ -11,6 +11,7 @@
 		duration?: string;
 		thumbnail?: string;
 		videoUrl?: string;
+		isAnnotated?: boolean;
 	}
 
 	let videos = $state<Video[]>([]);
@@ -28,8 +29,8 @@
 		{ value: 'Range of Motion', label: 'Range of Motion' }
 	];
 
-	onMount(async () => {
-		await loadVideos();
+	onMount(() => {
+		void loadVideos();
 	});
 
 	async function loadVideos() {
@@ -37,7 +38,7 @@
 		error = '';
 
 		try {
-			const response = await fetch(VIDEO_LIST_ENDPOINT);
+			const response = await fetch(API_CONFIG.VIDEO_LIST_ENDPOINT);
 
 			if (!response.ok) {
 				throw new Error(`Failed to load videos: ${response.statusText}`);
@@ -49,7 +50,8 @@
 			console.log('Backend response for all videos:', data);
 
 			// Handle both response formats: {videos: [...]} or directly [...]
-			const videoList = Array.isArray(data) ? data : (data.videos || []);
+			const rawVideoList = Array.isArray(data) ? data : (data.videos || []);
+			const videoList = rawVideoList.filter((v: any) => v.annotated_video_url);
 
 			if (videoList.length > 0) {
 				console.log('First video data:', videoList[0]);
@@ -61,10 +63,8 @@
 				const exercise = v.exercise_type || v.exerciseType || v.exercise ||
 				                v.biometrics?.exercise_type || v.metadata?.exercise_type || 'General';
 
-				// Extract filename from video_url - backend returns full file paths
-				const filename = extractFilename(v.video_url) || v.filename || 'video.mp4';
-				// Construct proper relative URL for video playback
-				const videoUrl = `/files/videos/${filename}`;
+				const filename = extractFilename(v.annotated_video_url) || v.filename || 'video_out.mp4';
+				const videoUrl = v.annotated_video_url;
 
 				const videoData = {
 					filename: filename,
@@ -73,10 +73,13 @@
 					uploadDate: v.uploaded_at || v.upload_date || new Date().toISOString(),
 					duration: v.duration || undefined,
 					thumbnail: v.thumbnail || undefined,
-					videoUrl: videoUrl  // Use relative path like /files/videos/abc.mp4
+					videoUrl: videoUrl,
+					isAnnotated: true
 				};
 
-				console.log(`Video ${v.submission_id || filename} - Exercise: ${exercise}, URL: ${videoUrl}`);
+				console.log(
+					`Video ${v.submission_id || filename} - Exercise: ${exercise}, URL: ${videoUrl}, Annotated: ${videoData.isAnnotated}`
+				);
 
 				return videoData;
 			});
@@ -103,7 +106,7 @@
 		return new Promise((resolve) => {
 			try {
 				const video = document.createElement('video');
-				const fullUrl = `${BASE_URL}${videoUrl}`;
+				const fullUrl = `${API_CONFIG.BASE_URL}${videoUrl}`;
 
 				video.muted = true;
 				video.preload = 'metadata';
@@ -166,9 +169,10 @@
 	}
 
 	function handleVideoClick(video: Video) {
-		// Navigate to video detail page or play video
-		// Use BASE_URL instead of DOWNLOAD_ENDPOINT for proper video serving
-		const videoUrl = `${BASE_URL}/files/videos/${video.filename}`;
+		if (!video.videoUrl) return;
+		const videoUrl = video.videoUrl.startsWith('http')
+			? video.videoUrl
+			: `${API_CONFIG.BASE_URL}${video.videoUrl}`;
 		window.open(videoUrl, '_blank');
 	}
 
@@ -203,7 +207,7 @@
 
 <div class="container">
 	<header>
-		<button class="back-button" on:click={handleBack} aria-label="Go back">
+		<button class="back-button" onclick={handleBack} aria-label="Go back">
 			<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 				<path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 			</svg>
@@ -233,7 +237,7 @@
 	</div>
 
 	<!-- Upload New Button -->
-	<button class="upload-new-button" on:click={handleUploadNew}>
+	<button class="upload-new-button" onclick={handleUploadNew}>
 		<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 			<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 		</svg>
@@ -256,7 +260,7 @@
 				<path d="M24 16v8M24 28v2" stroke="#f44336" stroke-width="2" stroke-linecap="round"/>
 			</svg>
 			<p class="error-message">{error}</p>
-			<button class="retry-button" on:click={loadVideos}>Retry</button>
+			<button class="retry-button" onclick={loadVideos}>Retry</button>
 		</div>
 	{/if}
 
@@ -270,15 +274,15 @@
 				</svg>
 				<h2>No Videos Found</h2>
 				<p>{searchQuery || selectedExercise !== 'all' ? 'Try adjusting your filters' : 'Upload your first recording to get started'}</p>
-				<button class="upload-button" on:click={handleUploadNew}>Upload Recording</button>
+				<button class="upload-button" onclick={handleUploadNew}>Upload Recording</button>
 			</div>
 		{:else}
 			<div class="video-grid">
-				{#each filteredVideos() as video}
-					<div class="video-card" on:click={() => handleVideoClick(video)}>
-						<div class="video-thumbnail">
-							{#if video.thumbnail}
-								<img src={video.thumbnail} alt={video.filename} />
+					{#each filteredVideos() as video}
+						<button type="button" class="video-card" onclick={() => handleVideoClick(video)}>
+							<div class="video-thumbnail">
+								{#if video.thumbnail}
+									<img src={video.thumbnail} alt={video.filename} />
 							{:else}
 								<div class="thumbnail-placeholder">
 									<svg width="48" height="48" viewBox="0 0 48 48" fill="none">
@@ -291,16 +295,16 @@
 								<span class="duration-badge">{video.duration}</span>
 							{/if}
 						</div>
-						<div class="video-info">
-							<h3 class="video-title">{video.exercise || 'General'}</h3>
-							<p class="video-patient">{video.patient}</p>
-							<div class="video-meta">
-								<span class="video-date">{formatDate(video.uploadDate)}</span>
+							<div class="video-info">
+								<h3 class="video-title">{video.exercise || 'General'}</h3>
+								<p class="video-patient">{video.patient}</p>
+								<div class="video-meta">
+									<span class="video-date">{formatDate(video.uploadDate)}</span>
+								</div>
 							</div>
-						</div>
-					</div>
-				{/each}
-			</div>
+						</button>
+					{/each}
+				</div>
 		{/if}
 	{/if}
 </div>
@@ -531,8 +535,13 @@
 	}
 
 	.video-card {
+		border: none;
 		background-color: #ffffff;
 		border-radius: 12px;
+		display: block;
+		padding: 0;
+		text-align: left;
+		width: 100%;
 		overflow: hidden;
 		cursor: pointer;
 		transition: transform 0.2s, box-shadow 0.2s;

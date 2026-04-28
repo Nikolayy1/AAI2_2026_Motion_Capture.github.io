@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { CREATE_PATIENT_ENDPOINT, UPDATE_PATIENT_ENDPOINT, PATIENT_VIDEOS_ENDPOINT } from '$lib/config';
+	import { API_CONFIG } from '$lib/config';
 
 	// Form state
 	let fullName = $state('');
@@ -63,7 +63,7 @@
 
 	async function loadPatientData(id: number) {
 		try {
-			const endpoint = PATIENT_VIDEOS_ENDPOINT.replace(':id', id.toString());
+			const endpoint = API_CONFIG.PATIENT_VIDEOS_ENDPOINT.replace(':id', id.toString());
 			const response = await fetch(endpoint);
 			if (response.ok) {
 				const data = await response.json();
@@ -123,7 +123,7 @@
 			formData.append('height', biometricData.height);
 			formData.append('weight', biometricData.weight);
 
-			const response = await fetch(CREATE_PATIENT_ENDPOINT, {
+			const response = await fetch(API_CONFIG.CREATE_PATIENT_ENDPOINT, {
 				method: 'POST',
 				body: formData
 			});
@@ -169,7 +169,7 @@
 			formData.append('height', biometricData.height);
 			formData.append('weight', biometricData.weight);
 
-			const endpoint = UPDATE_PATIENT_ENDPOINT.replace('{patient_id}', patientId.toString());
+			const endpoint = API_CONFIG.UPDATE_PATIENT_ENDPOINT.replace('{patient_id}', patientId.toString());
 			const response = await fetch(endpoint, {
 				method: 'PUT',
 				body: formData
