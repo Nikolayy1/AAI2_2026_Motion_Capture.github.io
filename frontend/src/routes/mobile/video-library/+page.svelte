@@ -203,7 +203,7 @@
 
 <div class="container">
 	<header>
-		<button class="back-button" onclick={handleBack} aria-label="Go back">
+		<button class="back-button" on:click={handleBack} aria-label="Go back">
 			<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 				<path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 			</svg>
@@ -233,7 +233,7 @@
 	</div>
 
 	<!-- Upload New Button -->
-	<button class="upload-new-button" onclick={handleUploadNew}>
+	<button class="upload-new-button" on:click={handleUploadNew}>
 		<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 			<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 		</svg>
@@ -256,7 +256,7 @@
 				<path d="M24 16v8M24 28v2" stroke="#f44336" stroke-width="2" stroke-linecap="round"/>
 			</svg>
 			<p class="error-message">{error}</p>
-			<button class="retry-button" onclick={loadVideos}>Retry</button>
+			<button class="retry-button" on:click={loadVideos}>Retry</button>
 		</div>
 	{/if}
 
@@ -270,12 +270,12 @@
 				</svg>
 				<h2>No Videos Found</h2>
 				<p>{searchQuery || selectedExercise !== 'all' ? 'Try adjusting your filters' : 'Upload your first recording to get started'}</p>
-				<button class="upload-button" onclick={handleUploadNew}>Upload Recording</button>
+				<button class="upload-button" on:click={handleUploadNew}>Upload Recording</button>
 			</div>
 		{:else}
 			<div class="video-grid">
 				{#each filteredVideos() as video}
-					<div class="video-card" onclick={() => handleVideoClick(video)}>
+					<div class="video-card" on:click={() => handleVideoClick(video)}>
 						<div class="video-thumbnail">
 							{#if video.thumbnail}
 								<img src={video.thumbnail} alt={video.filename} />

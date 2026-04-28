@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { CREATE_PATIENT_ENDPOINT, UPDATE_PATIENT_ENDPOINT } from '$lib/config';
+	import { CREATE_PATIENT_ENDPOINT, UPDATE_PATIENT_ENDPOINT, PATIENT_VIDEOS_ENDPOINT } from '$lib/config';
 
 	// Form state
 	let fullName = $state('');
@@ -63,7 +63,8 @@
 
 	async function loadPatientData(id: number) {
 		try {
-			const response = await fetch(UPDATE_PATIENT_ENDPOINT.replace('{patient_id}', id.toString()));
+			const endpoint = PATIENT_VIDEOS_ENDPOINT.replace(':id', id.toString());
+			const response = await fetch(endpoint);
 			if (response.ok) {
 				const data = await response.json();
 				fullName = data.patient.name || '';
