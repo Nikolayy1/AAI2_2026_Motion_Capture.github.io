@@ -70,6 +70,14 @@
 				throw new Error(data.error);
 			}
 
+			// Debug: Log the response to see what fields are available
+			console.log('Backend response for patient videos:', data);
+			if (data.videos && data.videos.length > 0) {
+				console.log('First video data:', data.videos[0]);
+				console.log('All fields in first video:', Object.keys(data.videos[0]));
+				console.log('First video JSON:', JSON.stringify(data.videos[0], null, 2));
+			}
+
 			// Extract filename from video_url path
 			const extractFilename = (url: string) => {
 				if (!url) return 'video.mp4';
@@ -84,36 +92,44 @@
 			};
 
 			// Map backend response to frontend PatientData interface
-			const mappedVideos = data.videos.map((v: any) => ({
-				id: String(v.submission_id || ''),
-				filename: extractFilename(v.video_url),
-				videoUrl: v.video_url || '',  // Store full path like /files/videos/abc.mp4
-				exercise: 'Gait Analysis', // Default since backend doesn't provide exercise type
-				date: formatUploadDate(v.uploaded_at), // Use actual upload date
-				duration: '00:00', // Backend doesn't provide duration
-				thumbnail: undefined as string | undefined
-			}));
+			const mappedVideos = data.videos.map((v: any) => {
+				// Try multiple possible field names for exercise type
+				const exercise = v.exercise_type || v.exerciseType || v.exercise ||
+				                v.biometrics?.exercise_type || v.metadata?.exercise_type || 'General';
 
+				console.log(`Video ${v.submission_id} exercise:`, exercise, 'Raw video data:', v);
+
+				// Extract filename from video_url - backend returns full file paths
+				const filename = extractFilename(v.video_url);
+				// Construct proper relative URL for video playback
+				const videoUrl = `/files/videos/${filename}`;
+
+				console.log(`Video URL mapping: ${v.video_url} -> ${videoUrl}`);
+
+				return {
+					id: String(v.submission_id || ''),
+					filename: filename,
+					videoUrl: videoUrl,  // Use relative path like /files/videos/abc.mp4
+					exercise: exercise,
+					date: formatUploadDate(v.uploaded_at), // Use actual upload date
+					duration: v.duration || '00:00', // Use duration from backend if available
+					thumbnail: undefined as string | undefined
+				};
+			});
+
+			// Get biometric data from patient object (not from videos)
 			patientData = {
 				name: data.patient?.name || patientName,
-				age: data.videos[0]?.biometrics?.age || 0,
-				gender: data.videos[0]?.biometrics?.gender || 'Unknown',
-				height: data.videos[0]?.biometrics?.height || 0,
-				weight: data.videos[0]?.biometrics?.weight || 0,
+				age: data.patient?.age || 0,
+				gender: data.patient?.gender || 'Unknown',
+				height: data.patient?.height || 0,
+				weight: data.patient?.weight || 0,
 				videos: mappedVideos
 			};
 
-			// Generate thumbnails asynchronously after data is loaded
-			mappedVideos.forEach(async (video, index) => {
-				if (video.videoUrl) {
-					const thumbnail = await generateThumbnail(video.videoUrl);
-					if (thumbnail && patientData) {
-						patientData.videos[index].thumbnail = thumbnail;
-						// Trigger reactivity
-						patientData = { ...patientData };
-					}
-				}
-			});
+			// Thumbnail generation disabled due to CORS security restrictions
+			// Videos will show placeholder icon instead
+			// To enable: backend needs to serve videos with proper CORS headers
 		} catch (err) {
 			console.error('Error loading patient data:', err);
 			error = `${err}`;
@@ -127,46 +143,96 @@
 		goto('/mobile/patients');
 	}
 
+	function handleEditBiometrics() {
+		if (patientId) {
+			goto(`/mobile/biometric-information?patientId=${patientId}&mode=edit&source=patient-detail`);
+		}
+	}
+
 	async function generateThumbnail(videoUrl: string): Promise<string | undefined> {
 		return new Promise((resolve) => {
 			try {
 				const video = document.createElement('video');
-				video.crossOrigin = 'anonymous';
-				video.src = `${BASE_URL}${videoUrl}`;
+				const fullUrl = `${BASE_URL}${videoUrl}`;
+
+				console.log('Attempting to load video for thumbnail:', fullUrl);
+
+				// IMPORTANT: Don't use crossOrigin to avoid CORS/tainted canvas issues
+				// This only works if video is served from same origin
 				video.muted = true;
+				video.preload = 'metadata';
+				video.autoplay = false;
 
-				video.onloadedmetadata = () => {
-					// Seek to 25% of video duration for better thumbnail
-					const seekTime = video.duration > 0 ? video.duration * 0.25 : 0;
-					video.currentTime = seekTime;
-				};
-
-				video.onseeked = () => {
-					try {
-						const canvas = document.createElement('canvas');
-						canvas.width = video.videoWidth;
-						canvas.height = video.videoHeight;
-						const ctx = canvas.getContext('2d');
-						if (ctx) {
-							ctx.drawImage(video, 0, 0);
-							const thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.7);
-							resolve(thumbnailDataUrl);
-						} else {
-							resolve(undefined);
-						}
-					} catch (err) {
-						console.error('Error generating thumbnail:', err);
-						resolve(undefined);
+				let hasResolved = false;
+				const resolveOnce = (value: string | undefined) => {
+					if (!hasResolved) {
+						hasResolved = true;
+						// Clean up
+						video.src = '';
+						video.load();
+						resolve(value);
 					}
 				};
 
-				video.onerror = () => {
-					console.error('Error loading video for thumbnail');
-					resolve(undefined);
+				video.onloadedmetadata = () => {
+					console.log('Video metadata loaded:', {
+						duration: video.duration,
+						width: video.videoWidth,
+						height: video.videoHeight
+					});
+
+					// Seek to 1 second or 25% of duration
+					const seekTime = Math.min(1, video.duration > 0 ? video.duration * 0.25 : 1);
+
+					// Add seeked listener before seeking
+					video.onseeked = () => {
+						try {
+							console.log('Video seeked, capturing frame...');
+							const canvas = document.createElement('canvas');
+							canvas.width = video.videoWidth || 640;
+							canvas.height = video.videoHeight || 360;
+
+							const ctx = canvas.getContext('2d', { willReadFrequently: false });
+							if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+								ctx.drawImage(video, 0, 0);
+
+								// Try to get the data URL, handle CORS errors
+								try {
+									const thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+									console.log('Thumbnail generated successfully');
+									resolveOnce(thumbnailDataUrl);
+								} catch (canvasErr: any) {
+									console.error('Canvas toDataURL error (likely CORS):', canvasErr.message);
+									// CORS issue - can't extract thumbnail
+									resolveOnce(undefined);
+								}
+							} else {
+								console.error('Canvas context not available or invalid video dimensions');
+								resolveOnce(undefined);
+							}
+						} catch (err) {
+							console.error('Error capturing video frame:', err);
+							resolveOnce(undefined);
+						}
+					};
+
+					video.currentTime = seekTime;
 				};
 
-				// Timeout after 5 seconds
-				setTimeout(() => resolve(undefined), 5000);
+				video.onerror = (e) => {
+					console.error('Error loading video for thumbnail:', video.error);
+					resolveOnce(undefined);
+				};
+
+				// Set source after all event listeners are attached
+				video.src = fullUrl;
+				video.load();
+
+				// Timeout after 10 seconds
+				setTimeout(() => {
+					console.warn('Thumbnail generation timeout for:', fullUrl);
+					resolveOnce(undefined);
+				}, 10000);
 			} catch (err) {
 				console.error('Thumbnail generation error:', err);
 				resolve(undefined);
@@ -267,23 +333,31 @@
 	{#if !isLoading && !error && patientData}
 		<!-- Patient Summary Card -->
 		<div class="patient-summary">
-			<h2>Patient Information</h2>
+			<div class="summary-header">
+				<h2>Patient Information</h2>
+				<button class="edit-button" onclick={handleEditBiometrics} aria-label="Edit biometric information">
+					<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+						<path d="M14.166 2.5a2.357 2.357 0 0 1 3.334 3.334l-9.167 9.167-4.166.833.833-4.166L14.166 2.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+					</svg>
+					Edit
+				</button>
+			</div>
 			<div class="info-grid">
 				<div class="info-item">
 					<span class="info-label">Age</span>
-					<span class="info-value">{patientData.age}</span>
+					<span class="info-value">{patientData.age || 'Not set'}</span>
 				</div>
 				<div class="info-item">
 					<span class="info-label">Gender</span>
-					<span class="info-value">{patientData.gender}</span>
+					<span class="info-value">{patientData.gender || 'Not set'}</span>
 				</div>
 				<div class="info-item">
 					<span class="info-label">Height</span>
-					<span class="info-value">{patientData.height} cm</span>
+					<span class="info-value">{patientData.height ? `${patientData.height} cm` : 'Not set'}</span>
 				</div>
 				<div class="info-item">
 					<span class="info-label">Weight</span>
-					<span class="info-value">{patientData.weight} kg</span>
+					<span class="info-value">{patientData.weight ? `${patientData.weight} kg` : 'Not set'}</span>
 				</div>
 			</div>
 			<div class="video-count-badge">
@@ -461,11 +535,45 @@
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 	}
 
+	.summary-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 16px;
+	}
+
 	.patient-summary h2 {
 		font-size: 16px;
 		font-weight: 600;
 		color: #333;
-		margin: 0 0 16px 0;
+		margin: 0;
+	}
+
+	.edit-button {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 16px;
+		background-color: #64B5F6;
+		color: white;
+		border: none;
+		border-radius: 6px;
+		font-size: 14px;
+		font-weight: 500;
+		cursor: pointer;
+		transition: background-color 0.2s;
+	}
+
+	.edit-button:hover {
+		background-color: #42A5F5;
+	}
+
+	.edit-button:active {
+		background-color: #1E88E5;
+	}
+
+	.edit-button svg {
+		stroke: currentColor;
 	}
 
 	.info-grid {

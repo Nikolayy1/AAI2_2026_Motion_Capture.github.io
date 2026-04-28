@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { CREATE_PATIENT_ENDPOINT } from '$lib/config';
+	import { CREATE_PATIENT_ENDPOINT, UPDATE_PATIENT_ENDPOINT, PATIENT_VIDEOS_ENDPOINT } from '$lib/config';
 
 	// Form state
 	let fullName = $state('');
@@ -18,7 +18,8 @@
 	let showErrors = $state(false);
 
 	// Flow detection
-	let source = $state('upload'); // 'upload' or 'create-patient'
+	let mode = $state('create'); // 'create' or 'edit'
+	let source = $state('upload'); // 'upload' or 'create-patient' or 'patient-detail'
 	let showSuccess = $state(false);
 	let isCreatingPatient = $state(false);
 
@@ -34,36 +35,48 @@
 		const urlParams = new URLSearchParams(window.location.search);
 		const patientIdParam = urlParams.get('patientId');
 		const patientNameParam = urlParams.get('patientName');
-		const oldPatientParam = urlParams.get('patient'); // Legacy support
-		source = urlParams.get('source') || 'upload';
+		const modeParam = urlParams.get('mode');
+		source = urlParams.get('source') || 'create-patient';
 
-		// Store patient ID for upload flow
-		if (patientIdParam) {
+		// Determine mode (create or edit)
+		if (modeParam === 'edit' || source === 'patient-detail') {
+			mode = 'edit';
+			if (patientIdParam) {
+				patientId = parseInt(patientIdParam);
+				// Load existing patient data
+				loadPatientData(patientId);
+			}
+		} else {
+			mode = 'create';
+		}
+
+		// Pre-fill patient name if available (for create mode)
+		if (mode === 'create' && patientNameParam) {
+			fullName = patientNameParam;
+		}
+
+		// Store patient ID if provided
+		if (patientIdParam && !patientId) {
 			patientId = parseInt(patientIdParam);
 		}
-
-		// Pre-fill patient name if available
-		if (patientNameParam) {
-			fullName = patientNameParam;
-		} else if (oldPatientParam && oldPatientParam !== 'new') {
-			fullName = oldPatientParam;
-		}
-
-		// Try to load existing biometric data from session storage (only for upload flow)
-		if (source === 'upload') {
-			const savedData = sessionStorage.getItem('biometricData');
-			if (savedData) {
-				const data = JSON.parse(savedData);
-				fullName = data.fullName || fullName;
-				gender = data.gender || gender;
-				age = data.age || age;
-				height = data.height || height;
-				weight = data.weight || weight;
-				notes = data.notes || notes;
-				patientId = data.patientId || patientId;
-			}
-		}
 	});
+
+	async function loadPatientData(id: number) {
+		try {
+			const endpoint = PATIENT_VIDEOS_ENDPOINT.replace(':id', id.toString());
+			const response = await fetch(endpoint);
+			if (response.ok) {
+				const data = await response.json();
+				fullName = data.patient.name || '';
+				gender = data.patient.gender || '';
+				age = data.patient.age?.toString() || '';
+				height = data.patient.height?.toString() || '';
+				weight = data.patient.weight?.toString() || '';
+			}
+		} catch (error) {
+			console.error('Error loading patient data:', error);
+		}
+	}
 
 	function selectGender(value: string) {
 		gender = value;
@@ -88,13 +101,12 @@
 			notes
 		};
 
-		if (source === 'create-patient') {
+		if (mode === 'edit') {
+			// Edit existing patient
+			await updatePatient(biometricData);
+		} else if (source === 'create-patient') {
 			// Create patient flow
 			await createPatient(biometricData);
-		} else {
-			// Upload video flow
-			sessionStorage.setItem('biometricData', JSON.stringify(biometricData));
-			goto('/mobile/recording-overview');
 		}
 	}
 
@@ -106,6 +118,10 @@
 			const formData = new FormData();
 			formData.append('user_id', '1'); // Using dummy user_id since auth is disabled
 			formData.append('name', biometricData.fullName);
+			formData.append('age', biometricData.age);
+			formData.append('gender', biometricData.gender);
+			formData.append('height', biometricData.height);
+			formData.append('weight', biometricData.weight);
 
 			const response = await fetch(CREATE_PATIENT_ENDPOINT, {
 				method: 'POST',
@@ -138,8 +154,54 @@
 		}
 	}
 
+	async function updatePatient(biometricData: any) {
+		isCreatingPatient = true;
+
+		try {
+			if (!patientId) {
+				throw new Error('Patient ID is required');
+			}
+
+			// Create FormData for backend API
+			const formData = new FormData();
+			formData.append('age', biometricData.age);
+			formData.append('gender', biometricData.gender);
+			formData.append('height', biometricData.height);
+			formData.append('weight', biometricData.weight);
+
+			const endpoint = UPDATE_PATIENT_ENDPOINT.replace('{patient_id}', patientId.toString());
+			const response = await fetch(endpoint, {
+				method: 'PUT',
+				body: formData
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => ({}));
+				throw new Error(errorData.error || 'Failed to update patient');
+			}
+
+			const result = await response.json();
+			console.log('Patient updated:', result);
+
+			// Show success overlay
+			showSuccess = true;
+
+			// Navigate back to patient detail after 1 second
+			setTimeout(() => {
+				goto(`/mobile/patient-detail?id=${patientId}`);
+			}, 1000);
+
+		} catch (error) {
+			console.error('Error updating patient:', error);
+			alert(`Failed to update patient: ${error}`);
+			isCreatingPatient = false;
+		}
+	}
+
 	function handleBack() {
-		if (source === 'create-patient') {
+		if (source === 'patient-detail' && patientId) {
+			goto(`/mobile/patient-detail?id=${patientId}`);
+		} else if (source === 'create-patient') {
 			goto('/mobile/create-patient');
 		} else {
 			goto('/mobile/upload');
@@ -148,15 +210,17 @@
 
 	// Computed button text
 	let buttonText = $derived(() => {
-		if (isCreatingPatient) return 'Creating Patient...';
-		return source === 'create-patient' ? 'Create Patient' : 'Save & Continue';
+		if (isCreatingPatient) {
+			return mode === 'edit' ? 'Updating...' : 'Creating Patient...';
+		}
+		return mode === 'edit' ? 'Save Changes' : 'Create Patient';
 	});
 
 	// Computed subtitle
 	let subtitle = $derived(() => {
-		return source === 'create-patient'
-			? 'Add patient information'
-			: 'Add details to this recording';
+		return mode === 'edit'
+			? 'Update patient information'
+			: 'Add patient information';
 	});
 </script>
 
@@ -303,8 +367,8 @@
 						<path d="M20 32l8 8 16-16" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
 					</svg>
 				</div>
-				<h2 class="success-title">Patient Created!</h2>
-				<p class="success-message">{fullName} has been successfully added to the system.</p>
+				<h2 class="success-title">{mode === 'edit' ? 'Patient Updated!' : 'Patient Created!'}</h2>
+				<p class="success-message">{mode === 'edit' ? `${fullName}'s information has been successfully updated.` : `${fullName} has been successfully added to the system.`}</p>
 			</div>
 		</div>
 	{/if}

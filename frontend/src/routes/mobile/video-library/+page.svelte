@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { VIDEO_LIST_ENDPOINT, DOWNLOAD_ENDPOINT } from '$lib/config';
+	import { VIDEO_LIST_ENDPOINT, BASE_URL } from '$lib/config';
 
 	interface Video {
 		filename: string;
@@ -10,6 +10,7 @@
 		uploadDate?: string;
 		duration?: string;
 		thumbnail?: string;
+		videoUrl?: string;
 	}
 
 	let videos = $state<Video[]>([]);
@@ -43,7 +44,46 @@
 			}
 
 			const data = await response.json();
-			videos = data.videos || [];
+
+			// Debug: Log the response to see what fields are available
+			console.log('Backend response for all videos:', data);
+
+			// Handle both response formats: {videos: [...]} or directly [...]
+			const videoList = Array.isArray(data) ? data : (data.videos || []);
+
+			if (videoList.length > 0) {
+				console.log('First video data:', videoList[0]);
+			}
+
+			// Map backend response to frontend Video interface
+			videos = videoList.map((v: any) => {
+				// Try multiple possible field names for exercise type
+				const exercise = v.exercise_type || v.exerciseType || v.exercise ||
+				                v.biometrics?.exercise_type || v.metadata?.exercise_type || 'General';
+
+				// Extract filename from video_url - backend returns full file paths
+				const filename = extractFilename(v.video_url) || v.filename || 'video.mp4';
+				// Construct proper relative URL for video playback
+				const videoUrl = `/files/videos/${filename}`;
+
+				const videoData = {
+					filename: filename,
+					patient: v.patient_name || v.patient?.name || 'Unknown Patient',
+					exercise: exercise,
+					uploadDate: v.uploaded_at || v.upload_date || new Date().toISOString(),
+					duration: v.duration || undefined,
+					thumbnail: v.thumbnail || undefined,
+					videoUrl: videoUrl  // Use relative path like /files/videos/abc.mp4
+				};
+
+				console.log(`Video ${v.submission_id || filename} - Exercise: ${exercise}, URL: ${videoUrl}`);
+
+				return videoData;
+			});
+
+			// Thumbnail generation disabled due to CORS security restrictions
+			// Videos will show placeholder icon instead
+
 		} catch (err) {
 			console.error('Error loading videos:', err);
 			error = `${err}`;
@@ -51,6 +91,70 @@
 		} finally {
 			isLoading = false;
 		}
+	}
+
+	function extractFilename(url: string): string {
+		if (!url) return 'video.mp4';
+		const parts = url.split('/');
+		return parts[parts.length - 1] || 'video.mp4';
+	}
+
+	async function generateThumbnail(videoUrl: string): Promise<string | undefined> {
+		return new Promise((resolve) => {
+			try {
+				const video = document.createElement('video');
+				const fullUrl = `${BASE_URL}${videoUrl}`;
+
+				video.muted = true;
+				video.preload = 'metadata';
+
+				let hasResolved = false;
+				const resolveOnce = (value: string | undefined) => {
+					if (!hasResolved) {
+						hasResolved = true;
+						resolve(value);
+					}
+				};
+
+				video.onloadedmetadata = () => {
+					const seekTime = Math.min(1, video.duration > 0 ? video.duration * 0.25 : 1);
+					video.currentTime = seekTime;
+				};
+
+				video.onseeked = () => {
+					try {
+						const canvas = document.createElement('canvas');
+						canvas.width = video.videoWidth || 640;
+						canvas.height = video.videoHeight || 360;
+
+						const ctx = canvas.getContext('2d');
+						if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+							ctx.drawImage(video, 0, 0);
+							const thumbnailDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+							resolveOnce(thumbnailDataUrl);
+						} else {
+							resolveOnce(undefined);
+						}
+					} catch (err) {
+						console.error('Error capturing video frame:', err);
+						resolveOnce(undefined);
+					}
+				};
+
+				video.onerror = (e) => {
+					console.error('Error loading video for thumbnail:', e);
+					resolveOnce(undefined);
+				};
+
+				video.src = fullUrl;
+				video.load();
+
+				setTimeout(() => resolveOnce(undefined), 10000);
+			} catch (err) {
+				console.error('Thumbnail generation error:', err);
+				resolve(undefined);
+			}
+		});
 	}
 
 	function handleBack() {
@@ -63,7 +167,8 @@
 
 	function handleVideoClick(video: Video) {
 		// Navigate to video detail page or play video
-		const videoUrl = `${DOWNLOAD_ENDPOINT}/${video.filename}`;
+		// Use BASE_URL instead of DOWNLOAD_ENDPOINT for proper video serving
+		const videoUrl = `${BASE_URL}/files/videos/${video.filename}`;
 		window.open(videoUrl, '_blank');
 	}
 
@@ -98,7 +203,7 @@
 
 <div class="container">
 	<header>
-		<button class="back-button" onclick={handleBack} aria-label="Go back">
+		<button class="back-button" on:click={handleBack} aria-label="Go back">
 			<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 				<path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 			</svg>
@@ -128,7 +233,7 @@
 	</div>
 
 	<!-- Upload New Button -->
-	<button class="upload-new-button" onclick={handleUploadNew}>
+	<button class="upload-new-button" on:click={handleUploadNew}>
 		<svg width="24" height="24" viewBox="0 0 24 24" fill="none">
 			<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 		</svg>
@@ -151,7 +256,7 @@
 				<path d="M24 16v8M24 28v2" stroke="#f44336" stroke-width="2" stroke-linecap="round"/>
 			</svg>
 			<p class="error-message">{error}</p>
-			<button class="retry-button" onclick={loadVideos}>Retry</button>
+			<button class="retry-button" on:click={loadVideos}>Retry</button>
 		</div>
 	{/if}
 
@@ -165,12 +270,12 @@
 				</svg>
 				<h2>No Videos Found</h2>
 				<p>{searchQuery || selectedExercise !== 'all' ? 'Try adjusting your filters' : 'Upload your first recording to get started'}</p>
-				<button class="upload-button" onclick={handleUploadNew}>Upload Recording</button>
+				<button class="upload-button" on:click={handleUploadNew}>Upload Recording</button>
 			</div>
 		{:else}
 			<div class="video-grid">
 				{#each filteredVideos() as video}
-					<div class="video-card" onclick={() => handleVideoClick(video)}>
+					<div class="video-card" on:click={() => handleVideoClick(video)}>
 						<div class="video-thumbnail">
 							{#if video.thumbnail}
 								<img src={video.thumbnail} alt={video.filename} />
@@ -187,8 +292,8 @@
 							{/if}
 						</div>
 						<div class="video-info">
-							<h3 class="video-title">{video.patient}</h3>
-							<p class="video-exercise">{video.exercise || 'General'}</p>
+							<h3 class="video-title">{video.exercise || 'General'}</h3>
+							<p class="video-patient">{video.patient}</p>
 							<div class="video-meta">
 								<span class="video-date">{formatDate(video.uploadDate)}</span>
 							</div>
@@ -483,7 +588,7 @@
 		margin: 0 0 4px 0;
 	}
 
-	.video-exercise {
+	.video-patient {
 		font-size: 14px;
 		color: #64B5F6;
 		margin: 0 0 8px 0;
