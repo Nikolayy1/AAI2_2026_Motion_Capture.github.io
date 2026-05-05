@@ -600,3 +600,40 @@ async def video_detail(submission_id: int):
             "notes": row["notes"],
         }
     }
+    
+@app.get("/videos")
+async def all_videos(user_id: int = Depends(get_current_user)):
+    rows = await database.fetch_all("""
+        SELECT 
+            s.id,
+            s.video_path,
+            s.exercise_type,
+            s.uploaded_at,
+            p.name AS patient_name,
+            a.annotated_video_path,
+            a.keypoints_csv,
+            a.slam_path,
+            a.tracking_path,
+            a.wham_path
+        FROM submissions s
+        JOIN patients p ON p.id = s.patient_id
+        LEFT JOIN analyses a ON a.submission_id = s.id
+        WHERE p.user_id = :user_id
+        ORDER BY s.id DESC
+    """, {"user_id": user_id})
+
+    return [
+        {
+            "submission_id": row["id"],
+            "patient_name": row["patient_name"],
+            "exercise_type": row["exercise_type"],
+            "uploaded_at": row["uploaded_at"],
+            "video_url": to_url(row["video_path"]),
+            "annotated_video_url": to_url(row["annotated_video_path"]) if row["annotated_video_path"] else None,
+            "keypoints_csv": row["keypoints_csv"],
+            "slam_url": to_url(row["slam_path"]) if row["slam_path"] else None,
+            "tracking_url": to_url(row["tracking_path"]) if row["tracking_path"] else None,
+            "wham_url": to_url(row["wham_path"]) if row["wham_path"] else None,
+        }
+        for row in rows
+    ]
