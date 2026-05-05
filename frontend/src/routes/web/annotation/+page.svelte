@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { apiFetch } from "$lib/api";
+  import { API_CONFIG } from "$lib/config";
 
   const params = new URLSearchParams(window.location.search);
   const videoUrl = params.get("video");
@@ -183,8 +185,10 @@
     setVideoToFrame(Number(target.value));
   }
 
-  function exportCSV() {
-    if (!frames.length) return;
+  const submissionId = params.get("submission_id");
+
+  async function exportCSV() {
+    if (!frames.length || !submissionId) return;
 
     let csv = "frame,joint,x,y\n";
 
@@ -195,14 +199,24 @@
     }
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "edited_keypoints.csv";
-    a.click();
+    const formData = new FormData();
+    formData.append("file", blob, "corrected_keypoints_2d.csv");
 
-    URL.revokeObjectURL(url);
+    const res = await apiFetch(
+      `${API_CONFIG.BASE_URL}/videos/${submissionId}/corrected-keypoints`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+
+    if (!res.ok) {
+      alert("Failed to save corrected keypoints");
+      return;
+    }
+
+    alert("Corrected keypoints saved");
   }
 
   function handleLoadedMetadata() {

@@ -130,7 +130,7 @@
           <span></span>
         </div>
 
-        <a href="/login" class="secondary-btn">Log in</a>
+        <a href="/mobile/login" class="secondary-btn">Log in</a>
       </form>
     </div>
   </main>

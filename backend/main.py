@@ -637,3 +637,42 @@ async def all_videos(user_id: int = Depends(get_current_user)):
         }
         for row in rows
     ]
+    
+@app.post("/videos/{submission_id}/corrected-keypoints")
+async def save_corrected_keypoints(
+    submission_id: int,
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_user)
+):
+    submission = await database.fetch_one("""
+        SELECT s.id, s.video_path, p.user_id
+        FROM submissions s
+        JOIN patients p ON p.id = s.patient_id
+        WHERE s.id = :id
+    """, {"id": submission_id})
+
+    if not submission:
+        raise HTTPException(status_code=404, detail="submission not found")
+
+    if submission["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="not allowed")
+
+    # Your current folders are based on video filename stem, not submission id
+    video_stem = Path(submission["video_path"]).stem
+    output_dir = VIDEO_DIR / f"{video_stem}_results"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    save_path = output_dir / "corrected_keypoints_2d.csv"
+
+    content = await file.read()
+    with open(save_path, "wb") as f:
+        f.write(content)
+
+    relative_path = save_path.relative_to(STORAGE_DIR).as_posix()
+
+    return {
+        "message": "corrected keypoints saved",
+        "corrected_keypoints_url": to_url(relative_path),
+        "corrected_keypoints_path": relative_path
+    }

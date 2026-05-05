@@ -14,6 +14,7 @@
     videoUrl?: string;
     keypointsUrl?: string;
     isAnnotated?: boolean;
+    submissionId?: string;
   }
 
   let videos = $state<Video[]>([]);
@@ -87,6 +88,7 @@
           videoUrl,
           keypointsUrl: getKeypointsUrlFromVideoUrl(videoUrl),
           isAnnotated: true,
+          submissionId: v.submission_id || undefined,
         };
 
         console.log(
@@ -202,7 +204,7 @@
       : `${API_CONFIG.BASE_URL}${video.keypointsUrl}`;
 
     goto(
-      `/web/annotation?video=${encodeURIComponent(videoUrl)}&keypoints=${encodeURIComponent(keypointsUrl)}`,
+      `/web/annotation?submission_id=${video.submissionId}&video=${encodeURIComponent(videoUrl)}&keypoints=${encodeURIComponent(keypointsUrl)}`,
     );
   }
 
