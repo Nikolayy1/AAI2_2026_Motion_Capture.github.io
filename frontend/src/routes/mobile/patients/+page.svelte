@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { API_CONFIG } from '$lib/config';
+  import { apiFetch } from '$lib/api';
 
 	interface Patient {
 		id: number;
@@ -24,7 +25,7 @@
 		error = '';
 
 		try {
-			const response = await fetch(API_CONFIG.PATIENTS_LIST_ENDPOINT);
+			const response = await apiFetch(API_CONFIG.PATIENTS_LIST_ENDPOINT);
 			if (!response.ok) throw new Error('Failed to load patients');
 			const data = await response.json();
 

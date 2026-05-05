@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { API_CONFIG } from '$lib/config';
+  import { apiFetch } from '$lib/api';
 
 	interface Video {
 		id: string;
@@ -60,7 +61,7 @@
 
 		try {
 			const endpoint = API_CONFIG.PATIENT_VIDEOS_ENDPOINT.replace(':id', patientId!.toString());
-			const response = await fetch(endpoint);
+			const response = await apiFetch(endpoint);
 
 			if (!response.ok) throw new Error('Failed to load patient data');
 

@@ -18,5 +18,7 @@ export const API_CONFIG = {
 	PATIENT_VIDEOS_ENDPOINT: 'http://127.0.0.1:8000/patients/:id/videos',
 
 	// LOGIN_ENDPOINT: 'http://127.0.0.1:8000/login',
+	LOGIN_ENDPOINT: 'http://127.0.0.1:8000/login',
+	REGISTER_ENDPOINT: 'http://127.0.0.1:8000/register',
 	// REGISTER_ENDPOINT: 'http://127.0.0.1:8000/register',
 };
