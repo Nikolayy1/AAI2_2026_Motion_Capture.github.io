@@ -1,16 +1,58 @@
-# AAI2_2026_Motion_Capture.github.io
-Markerless Clinical Gait Analysis and Interactive Finetuning
+<p align="center">
+  <img src="assets/biomechanics4alllogo.png" alt="Biomechanics 4 All Logo" width="260"/>
+</p>
 
-# Setup
-## Backend
-PYTHON VERSION: 3.11.9
+<h1 align="center">Biomechanics 4 All</h1>
 
-go to project folder:
-	git pull origin dev or main
-	then go to backend folder in project folder and:
+<p align="center">
+  Markerless Clinical Gait Analysis and Interactive Finetuning
+</p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11.9-blue" />
+  <img src="https://img.shields.io/badge/Backend-FastAPI-green" />
+  <img src="https://img.shields.io/badge/Status-Active%20Development-orange" />
+</p>
 
-### 1. Create virtual environment
+---
+
+## Overview
+Biomechanics 4 All is a markerless clinical gait analysis platform designed to support biomechanical motion assessment and interactive motion finetuning.
+The system processes motion videos, extracts biomechanical movement data, and provides tools for improving analysis quality and workflow efficiency in healthcare and research environments.
+
+## Features
+- Markerless motion capture from video
+- Clinical gait analysis workflow
+- Interactive motion finetuning
+- Human pose estimation pipeline
+- Designed for healthcare and research applications
+
+## Tech Stack
+
+- Python 3.11.9
+- FastAPI
+- WHAM
+
+## Setup
+### Backend
+- Python 3.11.9
+
+### 1. Update the repository
+
+```
+git pull origin dev
+```
+or 
+```
+git pull origin main
+```
+
+Navigate into the backend folder:
+```
+cd backend
+```
+
+### 2. Create virtual environment
 
 **Windows**
 
@@ -28,7 +70,7 @@ source venv/bin/activate
 
 ---
 
-### 2. Install dependencies
+#### 3. Install dependencies
 
 ```
 python -m pip install -r requirements.txt
@@ -36,20 +78,33 @@ python -m pip install -r requirements.txt
 
 ---
 
-### 3. Start the server
+#### 4. Start the backend server
 
+**Local machine**
 ```
-(local machine)
 python -m uvicorn main:app --reload
-
-(local network)
+```
+**Local network**
+```
 python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ---
 
-### 4. Open API docs
+#### 5. Open API documentation
 
 ```
 http://127.0.0.1:8000/docs
 ```
+## Vision
+Biomechanics 4 All aims to provide an open-source markerless motion analysis solution for clinical and research applications.
+
+## Team
+Biomechanics 4 All  
+AAI2 Motion Capture Project 2026
+
+- Boris Kodzhabashev
+- Maximilian Barry
+- Michael Zeller
+- Niklas Hofstetter
+- Selina Hacker
