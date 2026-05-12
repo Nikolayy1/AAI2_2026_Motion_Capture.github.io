@@ -70,7 +70,7 @@ source venv/bin/activate
 
 ---
 
-#### 3. Install dependencies
+### 3. Install dependencies
 
 ```
 python -m pip install -r requirements.txt
@@ -78,7 +78,7 @@ python -m pip install -r requirements.txt
 
 ---
 
-#### 4. Start the backend server
+### 4. Start the backend server
 
 **Local machine**
 ```
@@ -91,7 +91,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
-#### 5. Open API documentation
+### 5. Open API documentation
 
 ```
 http://127.0.0.1:8000/docs
