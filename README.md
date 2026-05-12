@@ -108,3 +108,7 @@ AAI2 Motion Capture Project 2026
 - Michael Zeller
 - Niklas Hofstetter
 - Selina Hacker
+
+## License
+
+This project is licensed under the Apache License 2.0.
